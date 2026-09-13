@@ -43,14 +43,20 @@ Preparation has three steps: classify source lines, join ordinary prose wraps,
 then select units. Explicit Markdown headings, blockquotes, lists, indented
 code, and complete fenced regions retain their line structure. CRLF and lone
 CR become LF. Fences stay intact across blank lines, including an unclosed
-fence that runs to the end of the document.
+fence that runs to the end of the document. A bullet or an ordered marker whose
+start number is 1 can interrupt prose; another ordered marker starts a list at a
+block boundary, following the relevant [CommonMark list-item
+rule](https://spec.commonmark.org/0.31.2/#list-items). Thus a hard-wrapped line
+that starts `1859.` remains prose.
 
 Document mode preserves the ordered words and markers in the input; it applies
 no paragraph word limit. Paragraph mode retains bodies of 50–400 whitespace
 tokens. The nearest preceding heading attaches when the combined unit fits;
 otherwise an eligible body is scored alone. Oversized bodies are skipped with
 a reason, without being split. Multiple headings cannot consume each other
-and discard the body.
+and discard the body. Selection counts literal source tokens, including ATX
+markers such as `##` and setext underlines such as `=====`. It does not strip
+heading syntax at the 50- and 400-token boundaries.
 
 A short initial line ending in a colon can still be inferred as a heading.
 An immediate lowercase prose continuation prevents that inference; explicit
@@ -79,11 +85,14 @@ The destination must be a new file. The first JSONL record contains schema
 version, Git revision, manifest and code fingerprints, verified source hashes,
 detector options, and totals. Subsequent records include selected and skipped
 units: original source spans, row identity, class, register, model, structural
-kinds, heading attachment, input and detector word counts, score, categories,
-and skip reason. Spans use JavaScript UTF-16 offsets into the original row,
-with an inclusive start and exclusive end. Unit IDs use source identity and
-spans; indexes are only local ordering hints. Normalized text has its own hash.
-Unavailable sources have separate records and do not count as skipped units.
+kinds, heading attachment, optional blank-separated continuation-merge
+provenance, input and detector word counts, score, categories, and skip reason.
+Spans use JavaScript UTF-16 offsets into the original row, with an inclusive
+start and exclusive end. Unit IDs use source identity and spans; indexes are
+only local ordering hints. Normalized text has its own hash. The shared
+measurement-harness fingerprint is separate from the branch-specific legacy
+and current preprocessor fingerprints. Unavailable sources have separate
+records and do not count as skipped units.
 
 The comparison command runs both preprocessing paths with the same detector
 and available corpus. Its legacy path reproduces main at `fabd62d9`:
@@ -200,6 +209,10 @@ true-positive rate measured here is an **upper bound** on performance against
 current models, not an estimate of it. Nothing here has seen a 2026 model.
 
 ## Results (v3.22.0, 2026-07-31)
+
+These results used the historical whitespace-flattening preparation path. The
+legacy and repaired paths were compared with a pinned detector in the immutable
+[#290 comparison evidence](https://github.com/conorbronsdon/avoid-ai-writing/tree/39accce14131723c796ee640d88c3fe1b0223815/corpus/reports/fp-preprocessing-86ef5ab3).
 
 875 human paragraphs, 779 machine paragraphs.
 

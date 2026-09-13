@@ -3,6 +3,7 @@
 
 const assert = require('node:assert/strict');
 const AIDetector = require('../detector/patterns.js');
+const { legacyPrepareUnits } = require('./fp-measure.js');
 const {
   MIN_WORDS,
   MAX_WORDS,
@@ -228,6 +229,41 @@ test('only ordinary hard-wrapped prose is joined', () => {
   assert.equal(output.includes('\r'), false);
 });
 
+test('mid-paragraph ordinals do not start a list run', () => {
+  const historical = [
+    'The decisive year was',
+    '1859. The publication of that work changed the temper of the debate,',
+    `and no one who has read it can afford to pass over the evidence. ${words(35, 'tail')}`,
+  ].join('\n');
+  const decision = prepareUnits(historical).decisions[0];
+  assert.deepEqual(decision.kinds, ['prose']);
+  assert.equal(decision.text.includes('\n'), false);
+  assert.match(decision.text, /year was 1859\. The publication/);
+
+  const indentedContinuation = [
+    'The decisive year was',
+    '    discussed by the committee in',
+    `1859. The publication changed the debate. ${words(40, 'tail')}`,
+  ].join('\n');
+  const indented = prepareUnits(indentedContinuation).decisions[0];
+  assert.deepEqual(indented.kinds, ['prose']);
+  assert.equal(indented.text.includes('\n'), false);
+
+  for (const input of [
+    `Prose opens here\n1. First item ${words(48)}`,
+    `Prose opens here\n01. First item ${words(48)}`,
+    `Prose opens here\n- Bullet item ${words(48)}`,
+    `Prose opens here\n\n1859. Ordered item ${words(48)}`,
+    `## Context\n2. Ordered item ${words(48)}`,
+  ]) {
+    assert.ok(prepareUnits(input).decisions.some((item) => item.kinds.includes('list')), input);
+  }
+
+  const afterCode = prepareUnits(`    code\n2. Second item ${words(50)}`).decisions;
+  assert.ok(afterCode.some((item) => item.kinds.includes('indented-code')));
+  assert.ok(afterCode.some((item) => item.kinds.includes('list')));
+});
+
 test('mixed prose and five short bullets remain one eligible source body', () => {
   const intro = 'The report contains a list of the available components for this release. Each component has a corresponding entry in the inventory and a named owner on the review team. The owner checks the entry against the published release manifest before every scheduled deployment review.';
   const bullets = ['Cloud platform', 'API gateway', 'Data pipeline', 'Event stream', 'Message queue'];
@@ -252,17 +288,19 @@ test('mixed prose and five short bullets remain one eligible source body', () =>
   const twoWordBullets = ['Cloud platform', 'API gateway', 'Data pipeline', 'Event stream', 'Message queue']
     .map((item) => `- ${item}`)
     .join('\n');
-  for (const proseWords of [390, 399]) {
+  for (const proseWords of [386, 390, 399]) {
     const over = prepareUnits(`${words(proseWords)}\n\n${twoWordBullets}`).decisions;
     assert.equal(over[0].status, 'selected');
     assert.equal(over[0].inputWords, proseWords);
     assert.equal(over[0].text, words(proseWords));
     assert.equal(over[1].reason, 'below-min');
+    assert.equal(Object.hasOwn(over[0], 'mergedContinuation'), false);
   }
   const exact = prepareUnits(`${words(385)}\n\n${twoWordBullets}`).decisions;
   assert.equal(exact.length, 1);
   assert.equal(exact[0].status, 'selected');
   assert.equal(exact[0].inputWords, 400);
+  assert.equal(exact[0].mergedContinuation, true);
 
   const unicodeBullets = ['Cloud platform', 'API gateway', 'Data pipeline', 'Event stream', 'Message queue']
     .map((item) => `• ${item}`)
@@ -294,6 +332,54 @@ test('mixed prose and five short bullets remain one eligible source body', () =>
   const preparedIndentedTypes = AIDetector.analyzeText(indentedPrepared[0].text).issues.map((issue) => issue.type);
   assert.ok(rawIndentedTypes.includes('bullet-np-list'));
   assert.ok(preparedIndentedTypes.includes('bullet-np-list'));
+});
+
+test('detector deltas are pinned against the frozen legacy preparation', () => {
+  const detect = (prepare, text) => prepare(text).decisions
+    .filter((decision) => decision.status === 'selected')
+    .map((decision) => AIDetector.analyzeText(decision.text, { contextMode: 'general', sourceMode: 'plain' }));
+  const types = (results) => results.flatMap((result) => result.issues.map((issue) => issue.type));
+
+  const quote = [
+    '> The record was genuinely useful.',
+    '> At dawn, the second group carefully recorded every ordinary observation from the northern room before returning home.',
+    '> The smaller result was truly useful.',
+    '> Nothing changed during this trial, although several reviewers stayed late to compare individual pages against older copies in storage and record their doubts.',
+    '> Everyone left.',
+  ].join('\n');
+  const legacyQuote = detect(legacyPrepareUnits, quote);
+  const currentQuote = detect(prepareUnits, quote);
+  assert.deepEqual(legacyQuote.map((result) => result.score), [4]);
+  assert.equal(types(legacyQuote).length, 2);
+  assert.deepEqual(currentQuote.map((result) => result.score), [0]);
+  assert.deepEqual(types(currentQuote), []);
+
+  const bullets = `${words(45, 'intro')}\n${['Cloud platform', 'API gateway', 'Data pipeline', 'Event stream', 'Message queue'].map((item) => `- ${item}`).join('\n')}`;
+  assert.deepEqual(types(detect(legacyPrepareUnits, bullets)), []);
+  assert.deepEqual(types(detect(prepareUnits, bullets)), ['bullet-np-list']);
+
+  const setext = `Benefits And Strategic Considerations\n=====\n${words(50, 'body')}`;
+  assert.deepEqual(types(detect(legacyPrepareUnits, setext)), []);
+  assert.deepEqual(types(detect(prepareUnits, setext)), ['title-case-header']);
+
+  const fence = `\`\`\`\n- Cloud platform\n- API gateway\n- Data pipeline\n- Event stream\n- Message queue\n# Benefits And Strategic Considerations\n\`\`\`\n${words(50, 'body')}`;
+  assert.deepEqual(types(detect(legacyPrepareUnits, fence)), []);
+  assert.deepEqual(types(detect(prepareUnits, fence)), []);
+});
+
+test('heading markers remain source tokens at selection boundaries', () => {
+  const atFloor = prepareUnits(`## ${words(49, 'heading')}`).decisions[0];
+  assert.equal(atFloor.inputWords, 50);
+  assert.equal(atFloor.status, 'selected');
+
+  const over = prepareUnits(`#### A B\n${words(398, 'body')}`).decisions;
+  assert.equal(over[0].headingAttached, false);
+  assert.equal(over[0].reason, 'heading-would-exceed-maximum');
+  assert.equal(over[1].inputWords, 398);
+
+  const atCeiling = prepareUnits(`## Context\n${words(398, 'body')}`).decisions[0];
+  assert.equal(atCeiling.inputWords, 400);
+  assert.equal(atCeiling.headingAttached, true);
 });
 
 test('blank-separated list and quote continuations retain their layout', () => {
