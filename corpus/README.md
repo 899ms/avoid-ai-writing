@@ -32,6 +32,71 @@ node scripts/fp-measure.js       # the measurement
 changed under us invalidates the measurement it backs, and that should be an
 argument, not a silent update.
 
+## How text reaches the detector
+
+`fp-measure.js` verifies each available source against its manifest hash before
+scoring it. An unavailable source is reported separately; a hash mismatch stops
+the run. Neither measurement nor comparison rewrites the manifest.
+
+Preparation has three steps: classify source lines, join ordinary prose wraps,
+then select units. Explicit Markdown headings, blockquotes, lists, indented
+code, and complete fenced regions retain their line structure. CRLF and lone
+CR become LF. Fences stay intact across blank lines, including an unclosed
+fence that runs to the end of the document.
+
+Document mode preserves the ordered words and markers in the input; it applies
+no paragraph word limit. Paragraph mode retains bodies of 50–400 whitespace
+tokens. The nearest preceding heading attaches when the combined unit fits;
+otherwise an eligible body is scored alone. Oversized bodies are skipped with
+a reason, without being split. Multiple headings cannot consume each other
+and discard the body.
+
+A short initial line ending in a colon can still be inferred as a heading.
+An immediate lowercase prose continuation prevents that inference; explicit
+Markdown heading syntax takes precedence over case. These decisions carry
+`colon-inferred` provenance because attribution prose can have the same shape.
+This heuristic needs inspection when comparing a new corpus.
+
+Selection and detector acceptance are separate. For example, a document over
+the detector's 10,000-word ceiling is preserved during preparation but recorded
+as `detector-too-long`. Quotation masking can make an otherwise eligible unit
+too short. The 50-word selection floor counts source tokens; the detector's
+existing minimum is ten visible words after masking. A selected paragraph can
+therefore have 10–49 detector-visible words. Both counts remain in the dump so
+this population can be inspected without silently changing the measurement
+policy. Code structure is preserved for the detector's structural rules;
+the existing detector still checks some vocabulary inside code.
+
+To inspect every decision without exporting corpus text:
+
+```bash
+node scripts/fp-measure.js --unit paragraph --dump-units /tmp/paragraph-units.jsonl --json
+node scripts/fp-measure.js --unit document --dump-units /tmp/document-units.jsonl --json
+```
+
+The destination must be a new file. The first JSONL record contains schema
+version, Git revision, manifest and code fingerprints, verified source hashes,
+detector options, and totals. Subsequent records include selected and skipped
+units: original source spans, row identity, class, register, model, structural
+kinds, heading attachment, input and detector word counts, score, categories,
+and skip reason. Spans use JavaScript UTF-16 offsets into the original row,
+with an inclusive start and exclusive end. Unit IDs use source identity and
+spans; indexes are only local ordering hints. Normalized text has its own hash.
+Unavailable sources have separate records and do not count as skipped units.
+
+The comparison command runs both preprocessing paths with the same detector
+and available corpus. Its legacy path reproduces main at `fabd62d9`:
+
+```bash
+node scripts/fp-compare.js --out /tmp/fp-comparison
+```
+
+Compare selected and skipped populations alongside category counts, source
+and register rates, and individual changed spans. A rate change may reflect a
+different set of units or restored Markdown boundaries. It does not by itself
+establish better authorship detection. Missing sources remain visible and
+limit the comparison.
+
 ## Register is the unit of analysis
 
 Not a label of convenience. Patina's Korean human-control pilot measured false
@@ -212,10 +277,12 @@ labels. The detector matches stock first-person introductions in expository and
 social prose. Those are different constructs in different registers, so the
 paper supplies no direction for this category's authorship weight.
 
-The document and paragraph measurement paths collapse source line breaks, so
-their counts do not cover line-anchored header variants. A separate raw-text
-scan found no matches either. That control supports the absence reported here;
-it does not validate the measurement preprocessing for other categories.
+The historical document and paragraph measurements above collapsed source line
+breaks, so their counts did not cover line-anchored header variants. A separate
+raw-text scan found no matches either. That control supports the absence
+reported there; it does not validate other categories. The repaired preparation
+described above preserves structural boundaries. Use its fixed-corpus comparison
+before drawing conclusions from new measurements.
 
 **Decision for this unobserved category.** Zero hits on both sides select no
 branch of the issue #82 lift-based decision rule. Because the rule was challenged

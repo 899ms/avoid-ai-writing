@@ -15,6 +15,8 @@ const SUITES = [
   'scripts/check-style.test.js',
   'scripts/normalize-quotes.test.js',
   'scripts/fp-measure.test.js',
+  'scripts/fp-preprocess.test.js',
+  'scripts/fp-compare.test.js',
   'scripts/self-scan.test.js',
   'scripts/self-scan-diagnostics.test.js',
   'scripts/test-canonical-skill-package.js',
