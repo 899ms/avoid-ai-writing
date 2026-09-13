@@ -608,6 +608,21 @@ Pass an optional context hint to adjust rule strictness. If no context is specif
 **`docs`** — Documentation, READMEs, guides. Clarity over voice.
 **`casual`** — Slack messages, internal notes, quick replies. Only catch the worst offenders.
 
+### Detector mode mapping
+
+The skill context profiles map to the detector's `contextMode` values as follows:
+
+| Profile | Detector mode | What differs |
+|---|---|---|
+| `linkedin` | `marketing` | Uses the LinkedIn tolerance profile in the skill; detector currently scores `marketing` like `general`. |
+| `blog` | `general` | Baseline detector behavior; the skill applies the blog tolerance profile. |
+| `technical-blog` | `technical` | Enables the detector's technical-context suppressions and applies the technical-blog tolerance profile in the skill. |
+| `investor-email` | `marketing` | Uses the stricter investor-email tolerance profile in the skill; detector currently scores `marketing` like `general`. |
+| `docs` | `technical` | Enables the detector's technical-context suppressions and applies the docs tolerance profile in the skill. |
+| `casual` | `personal` | Uses the casual tolerance profile in the skill; detector currently scores `personal` like `general`. |
+
+The mapping aligns the skill's audience-specific profiles with the detector's broader context modes. The skill still owns the full tolerance matrix; detector modes only control the engine behavior described above.
+
 ### Tolerance matrix
 
 Rules not listed in the table apply at full strength across all profiles.

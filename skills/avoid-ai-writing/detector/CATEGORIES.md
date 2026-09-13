@@ -136,9 +136,9 @@ mistake their absence for a coverage gap:
 - Self-reference escape hatch
 - Output format
 
-> **Partial:** the skill's **Context profiles / Tolerance matrix / Auto-detection
-> cues** are partly realized by the engine's `options.contextMode`
-> (`general`, `technical`, `marketing`, `personal`). Only `technical` currently
-> changes flagging (e.g. suppresses context-inappropriate flags); `marketing` and
-> `personal` are accepted and reported in stats but score like `general`. Full
-> profile-based tolerance remains an LLM-side judgment.
+> **Partial:** the skill's six context profiles map to the engine's broader
+> `options.contextMode` values as documented in
+> `references/patterns.md#detector-mode-mapping`. Only `technical` currently
+> changes flagging behavior; `marketing` and `personal` are accepted and reported
+> in stats but score like `general`. Full profile-based tolerance remains an
+> LLM-side judgment.
