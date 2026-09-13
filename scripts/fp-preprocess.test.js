@@ -394,6 +394,101 @@ test('fences use same-marker valid closers and stay atomic across blank lines', 
   assert.equal(oversizedResult.length, 1);
   assert.equal(oversizedResult[0].reason, 'above-max');
   assert.deepEqual(oversizedResult[0].kinds, ['fenced-code']);
+
+  const tabIndented = [
+    '\t```md',
+    '## Benefits And Strategic Considerations',
+    words(50, 'code'),
+    '',
+    '- Cloud platform',
+    '- API gateway',
+    '- Data pipeline',
+    '- Event stream',
+    '- Message queue',
+    '\t```',
+  ].join('\n');
+  const tabResult = prepareUnits(tabIndented).decisions;
+  assert.equal(tabResult.length, 1);
+  assert.equal(tabResult[0].status, 'selected');
+  assert.deepEqual(tabResult[0].kinds, ['fenced-code']);
+  assert.equal(tabResult[0].text, tabIndented);
+  const tabTypes = AIDetector.analyzeText(tabResult[0].text).issues.map((issue) => issue.type);
+  assert.equal(tabTypes.includes('bullet-np-list'), false);
+  assert.equal(tabTypes.includes('title-case-header'), false);
+});
+
+test('generated mixed documents assign every structural source span and sentinel exactly once', () => {
+  function uniqueSpan(source, fragment) {
+    const start = source.indexOf(fragment);
+    assert.notEqual(start, -1, `missing fixture fragment: ${fragment.slice(0, 30)}`);
+    assert.equal(source.lastIndexOf(fragment), start, `fixture fragment must be unique: ${fragment.slice(0, 30)}`);
+    return { start, end: start + fragment.length };
+  }
+
+  for (const newline of ['\n', '\r\n', '\r']) {
+    const boundaryHeading = 'Boundary399:';
+    const boundaryBody = `BODY399_START ${words(397, 'boundary')} BODY399_END`;
+    const eligibleHeading = `## HEADING50_START ${words(47, 'heading')} HEADING50_END`;
+    const body400 = `BODY400_START ${words(398, 'detached')} BODY400_END`;
+    const mixedBody = [
+      `MIXED_START ${words(39, 'mixed')}`,
+      '- Cloud platform',
+      '- API gateway',
+      '- Data pipeline',
+      '- Event stream',
+      '- Message queue',
+      `> Quoted observation ${words(8, 'quoted')}`,
+      `> MIXED_END ${words(8, 'ending')}`,
+    ].join(newline);
+    const fence = [
+      '\t```md',
+      'FENCE_START',
+      '## Benefits And Strategic Considerations',
+      words(50, 'fenced'),
+      '',
+      '- Cloud platform',
+      '- API gateway',
+      '- Data pipeline',
+      '- Event stream',
+      '- Message queue',
+      'FENCE_END',
+      '\t```',
+    ].join(newline);
+    const source = [
+      `${boundaryHeading}${newline}${boundaryBody}`,
+      `${eligibleHeading}${newline}${body400}`,
+      mixedBody,
+      fence,
+    ].join(newline + newline);
+
+    const decisions = prepareUnits(source).decisions;
+    assert.equal(decisions.length, 5);
+    assert.deepEqual(decisions.map((decision) => decision.status), Array(5).fill('selected'));
+    assert.deepEqual(decisions.map((decision) => decision.inputWords), [400, 50, 400, 76, 74]);
+    assert.deepEqual(decisions.map((decision) => decision.spans), [
+      [uniqueSpan(source, boundaryHeading), uniqueSpan(source, boundaryBody)],
+      [uniqueSpan(source, eligibleHeading)],
+      [uniqueSpan(source, body400)],
+      [uniqueSpan(source, mixedBody)],
+      [uniqueSpan(source, fence)],
+    ]);
+    assert.deepEqual(decisions.map((decision) => decision.kinds), [
+      ['colon-inferred', 'prose'],
+      ['atx-heading'],
+      ['prose'],
+      ['prose', 'list', 'blockquote'],
+      ['fenced-code'],
+    ]);
+
+    const allDecisionText = decisions.map((decision) => decision.text).join('\n');
+    for (const sentinel of [
+      'Boundary399:', 'BODY399_START', 'BODY399_END', 'HEADING50_START', 'HEADING50_END',
+      'BODY400_START', 'BODY400_END', 'MIXED_START', 'MIXED_END', 'FENCE_START', 'FENCE_END',
+    ]) {
+      assert.equal(allDecisionText.split(sentinel).length - 1, 1, `${sentinel} must occur exactly once`);
+    }
+    assert.deepEqual(tokens(allDecisionText), tokens(source));
+  }
 });
 
 test('indented code stays structural and uses only the shared word limits', () => {

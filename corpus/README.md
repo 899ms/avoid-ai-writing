@@ -34,9 +34,10 @@ argument, not a silent update.
 
 ## How text reaches the detector
 
-`fp-measure.js` verifies each available source against its manifest hash before
-scoring it. An unavailable source is reported separately; a hash mismatch stops
-the run. Neither measurement nor comparison rewrites the manifest.
+`fp-measure.js` reads each available source once, verifies that snapshot against
+its manifest hash, and constructs rows from those same bytes before scoring.
+An unavailable source is reported separately; a hash mismatch stops the run.
+Neither measurement nor comparison rewrites the manifest.
 
 Preparation has three steps: classify source lines, join ordinary prose wraps,
 then select units. Explicit Markdown headings, blockquotes, lists, indented

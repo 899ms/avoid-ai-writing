@@ -2,6 +2,9 @@
 /* Focused statistical-helper tests for `npm test`. */
 'use strict';
 const assert = require('assert');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { wilson, rocAuc, measure, summarize, legacyPrepareUnits } = require('./fp-measure.js');
 const { sha256 } = require('./corpus.js');
 const detector = require('../detector/patterns.js');
@@ -105,6 +108,32 @@ t('stable identities use original spans and retain class metadata', () => {
     assert.strictEqual(record.rowSourceHash, sha256(text));
     assert.strictEqual(record.normalizedHash, sha256(text.slice(record.spans[0].start, record.spans[0].end)));
   }
+});
+
+t('the default row parser scores the verified snapshot after the source changes', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'fp-verified-snapshot-'));
+  try {
+    const filename = path.join(directory, 'source.txt');
+    for (const sourceType of ['local', 'dataset']) {
+      const original = sourceType === 'dataset' ? JSON.stringify({ id: 'answer', text: words(60), class: 'machine' }) + '\n' : words(60);
+      const replacement = sourceType === 'dataset' ? JSON.stringify({ id: 'changed', text: words(90), class: 'machine' }) + '\n' : words(90);
+      fs.writeFileSync(filename, original);
+      const doc = { id: 'snapshot', source: { type: sourceType, path: filename }, sha256: sha256(original) };
+      let reads = 0;
+      const measured = measure({ manifest: { documents: [doc] }, loadText: () => {
+        reads++;
+        const snapshot = fs.readFileSync(filename, 'utf8');
+        fs.writeFileSync(filename, replacement);
+        return snapshot;
+      } });
+      assert.strictEqual(reads, 1);
+      assert.strictEqual(measured.metadata.sources[0].sha256, sha256(original));
+      assert.strictEqual(measured.records[0].rowSourceHash, sha256(words(60)));
+      assert.strictEqual(measured.records[0].inputWords, 60);
+      assert.strictEqual(measured.records[0].status, 'selected');
+      assert.strictEqual(fs.readFileSync(filename, 'utf8'), replacement);
+    }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
 t('legacy instrumentation preserves main paragraph filtering and document flattening', () => {

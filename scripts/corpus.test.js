@@ -20,6 +20,7 @@ const {
   cmdList,
   fetchDoc,
   FETCH_TIMEOUT_MS,
+  rowsFromText,
 } = require('./corpus.js');
 const { parseCsv } = require('./csv-lite.js');
 const { DOMAIN_REGISTER } = require('./dataset-raid.js');
@@ -37,6 +38,13 @@ function test(name, fn) {
 }
 
 console.log('\ncorpus helpers\n');
+
+test('constructs text and dataset rows from the supplied source snapshot', () => {
+  const doc = { id: 'snapshot', source: { type: 'local' }, register: 'docs', class: 'human' };
+  assert.deepEqual(rowsFromText(doc, 'captured text'), [{ id: 'snapshot', text: 'captured text', register: 'docs', class: 'human', model: null, domain: null }]);
+  assert.strictEqual(rowsFromText(doc, null), null);
+  assert.deepEqual(rowsFromText({ ...doc, source: { type: 'dataset' } }, '{"id":"one","text":"first"}\r\n\r\n{"id":"two","text":"second"}\n'), [{ id: 'one', text: 'first' }, { id: 'two', text: 'second' }]);
+});
 
 // ── Gutenberg boilerplate ──────────────────────────────────────────────
 

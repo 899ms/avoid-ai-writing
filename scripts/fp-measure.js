@@ -30,7 +30,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const AIDetector = require('../detector/patterns.js');
-const { readManifest, loadRows, loadText, sha256 } = require('./corpus.js');
+const { readManifest, rowsFromText, loadText, sha256 } = require('./corpus.js');
 const { prepareUnits, normalizeUnit, splitUnits, unitsForText } = require('./fp-preprocess.js');
 
 // Thresholds span the range the detector actually emits, not the range its
@@ -133,7 +133,7 @@ function measure(opts = {}) {
   if (!['paragraph', 'document'].includes(unit)) throw new Error('Invalid unit: use paragraph or document');
   if (!['current', 'legacy'].includes(preprocess)) throw new Error('Invalid preprocessing: use current or legacy');
   const prepare = preprocess === 'legacy' ? legacyPrepareUnits : prepareUnits;
-  const rowsFor = opts.loadRows || loadRows;
+  const rowsFor = opts.loadRows || null;
   const textFor = opts.loadText || (opts.loadRows ? null : loadText);
   const detector = opts.detector || AIDetector;
   const units = [];
@@ -145,16 +145,19 @@ function measure(opts = {}) {
   for (const doc of manifest.documents) {
     const source = { doc: doc.id, expectedSha256: doc.sha256 || null, sha256: null, status: 'injected' };
     let unavailable = false;
+    let verifiedText;
     if (textFor) {
-      const text = textFor(doc);
-      unavailable = text === null;
+      verifiedText = textFor(doc);
+      unavailable = verifiedText === null;
       if (!unavailable) {
-        source.sha256 = sha256(text);
+        source.sha256 = sha256(verifiedText);
         if (!doc.sha256 || source.sha256 !== doc.sha256) throw new Error('Corpus hash mismatch or missing hash: ' + doc.id + '; run corpus.js verify');
         source.status = 'verified';
       }
     }
-    const rows = unavailable ? null : rowsFor(doc);
+    // The default path parses the exact bytes just verified. Explicit row
+    // loaders remain injectable for tests; they must not trigger a second read.
+    const rows = unavailable ? null : rowsFor ? rowsFor(doc) : rowsFromText(doc, verifiedText);
     if (rows === null) {
       source.status = 'unavailable';
       sources.push(source);

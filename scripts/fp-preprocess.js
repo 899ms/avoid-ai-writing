@@ -12,7 +12,7 @@ const MIN_WORDS = 50;
 const MAX_WORDS = 400;
 
 const ATX = /^ {0,3}#{1,6}(?:[ \t]+|$)/;
-const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+const FENCE = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/;
 const LIST = /^[ \t]*(?:[-+*•]|\d+[.)])[ \t]+/;
 const LIST_CONTINUATION = /^(?: {2,}|\t)\S/;
 const QUOTE = /^[ \t]*>/;
@@ -83,7 +83,7 @@ function classify(lines) {
     const length = opener[1].length;
     let end = lines.length - 1;
     for (let j = i + 1; j < lines.length; j++) {
-      const close = lines[j].text.match(/^ {0,3}(`+|~+)[ \t]*$/);
+      const close = lines[j].text.match(/^[ \t]{0,3}(`+|~+)[ \t]*$/);
       if (close && close[1][0] === marker && close[1].length >= length) {
         end = j;
         break;
