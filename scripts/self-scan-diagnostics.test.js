@@ -3,7 +3,6 @@
 'use strict';
 const assert = require('assert');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const AIDetector = require('../detector/patterns.js');
 const { execFileSync } = require('node:child_process');
@@ -17,9 +16,10 @@ let passed = 0;
 const t = (name, fn) => { fn(); passed += 1; process.stdout.write(`  ✓ ${name}\n`); };
 const words = (text) => (text.match(/\S+/g) || []).length;
 
-// Fixtures live in a temp directory. scanFile() resolves paths against the
-// repo root, so hand it the relative path from there.
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'self-scan-diagnostics-'));
+// Fixtures live in a temp directory under the repo root, so the relative
+// path scanFile() joins onto ROOT stays valid on every platform (os.tmpdir()
+// can sit on a different Windows drive, which path.relative() cannot bridge).
+const tmpDir = fs.mkdtempSync(path.join(ROOT, '.self-scan-diagnostics-'));
 const fixture = (name, text) => {
   const file = path.join(tmpDir, name);
   fs.writeFileSync(file, text);
