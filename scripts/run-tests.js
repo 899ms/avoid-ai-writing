@@ -24,6 +24,7 @@ const SUITES = [
   'bin/avoid-ai-writing-gate.test.js',
   'scripts/rewrite-demo.test.js',
   'scripts/rewrite-eval.test.js',
+  'scripts/rewrite-eval-opencode.test.js',
   'scripts/fp-measure-cli.test.js',
 ];
 

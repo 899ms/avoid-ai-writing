@@ -12,6 +12,7 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- Add an explicit OpenCode 1.18.30 executor for frozen rewrite-evaluation plans. It limits calls to the observed free-model allowlist, disables tools, verifies prompt and model receipts, retains failed attempts, and revalidates evidence before import. Model runs remain opt-in; benchmark judgments and release gates remain separate (#201).
 - Add opt-in `fp-measure.js --dump-units PATH` provenance records and a fixed-detector `fp-compare.js` comparison of legacy and repaired preprocessing. Reports include selected and skipped units, source spans, corpus hashes, detector exclusions, and zero-observation categories (#288, #289).
 - Package the deterministic detector as a composite GitHub Action and pre-commit hook, backed by a new `avoid-ai-writing-gate` CLI. The gate uses per-file finding counts rather than the composite score, defaults to `technical` + `rendered-markdown`, and uses a corpus-backed threshold of 6 findings per file (1.9% human-control failure rate across 376 documents, versus 31.4% at zero). Strict zero-findings policies remain available with an explicit threshold of 0. Preservation validation stays separate because it requires before/after inputs (#86).
 
