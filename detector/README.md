@@ -120,6 +120,20 @@ reported in `stats.contextMode`, but currently score the same as `general`.
 Invalid modes fall back to `general` and set `stats.contextModeFallback` to the
 value you passed.
 
+The skill's context profiles map to `contextMode` as follows:
+
+| Skill profile | Detector mode | What differs |
+|---|---|---|
+| `linkedin` | `marketing` | The skill applies the LinkedIn tolerance profile; detector `marketing` currently scores like `general`. |
+| `blog` | `general` | The skill applies the default blog tolerance profile; detector uses baseline behavior. |
+| `technical-blog` | `technical` | The skill applies technical-blog tolerances; detector enables technical-context suppressions. |
+| `investor-email` | `marketing` | The skill applies stricter investor-email tolerances; detector `marketing` currently scores like `general`. |
+| `docs` | `technical` | The skill applies docs tolerances; detector enables technical-context suppressions. |
+| `casual` | `personal` | The skill applies casual tolerances; detector `personal` currently scores like `general`. |
+
+See [`references/patterns.md`](../references/patterns.md#detector-mode-mapping)
+for the full context-profile definitions and tolerance matrix.
+
 `options.sourceMode` accepts `plain` (default) or `rendered-markdown`. Rendered
 Markdown mode masks initial YAML frontmatter and HTML comments before pattern
 matching and document metrics run. Frontmatter may use LF, CRLF, or CR line
