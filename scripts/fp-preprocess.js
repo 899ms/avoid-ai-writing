@@ -69,17 +69,20 @@ function addKind(kinds, kind) {
   if (!kinds.includes(kind)) kinds.push(kind);
 }
 
-function isIndentedCodeLine(lines, index) {
-  if (index < 0 || !INDENTED.test(lines[index].text)) return false;
-  let start = index;
-  while (start > 0 && INDENTED.test(lines[start - 1].text) && !isBlank(lines[start - 1])) start -= 1;
-  return start === 0 || isBlank(lines[start - 1]);
+function potentialIndentedCodeLines(lines) {
+  const result = lines.map(() => false);
+  for (let i = 0; i < lines.length; i++) {
+    result[i] = !isBlank(lines[i])
+      && INDENTED.test(lines[i].text)
+      && (i === 0 || isBlank(lines[i - 1]) || result[i - 1]);
+  }
+  return result;
 }
 
 // An ordered marker other than numeric 1 cannot interrupt an open paragraph.
 // This narrow distinction follows https://spec.commonmark.org/0.31.2/#list-items
 // and keeps a hard-wrapped year such as `1859.` in prose.
-function startsListRun(lines, kinds, index) {
+function startsListRun(lines, kinds, indentedCode, index) {
   if (BULLET_LIST.test(lines[index].text)) return true;
   const ordered = lines[index].text.match(ORDERED_LIST);
   if (!ordered) return false;
@@ -87,13 +90,14 @@ function startsListRun(lines, kinds, index) {
   const previousKinds = kinds[index - 1];
   return previousKinds.length > 0
     || QUOTE.test(lines[index - 1].text)
-    || isIndentedCodeLine(lines, index - 1);
+    || indentedCode[index - 1];
 }
 
 /** Classify lines without changing their source offsets. */
 function classify(lines) {
   const kinds = lines.map(() => []);
   const fences = new Map();
+  const indentedCode = potentialIndentedCodeLines(lines);
 
   // A fence closes only with the same marker and at least the opener length.
   // Different or shorter markers inside it are content. An unclosed fence owns
@@ -141,7 +145,7 @@ function classify(lines) {
   // subsequent items or indented continuation. This keeps line structure and
   // prevents continuation text from being folded as an unrelated paragraph.
   for (let i = 0; i < lines.length; i++) {
-    if (kinds[i].length || !startsListRun(lines, kinds, i)) continue;
+    if (kinds[i].length || !startsListRun(lines, kinds, indentedCode, i)) continue;
     let j = i;
     while (j < lines.length) {
       if (kinds[j].some((kind) => kind.endsWith('heading') || kind === 'fenced-code')) break;
