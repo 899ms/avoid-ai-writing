@@ -189,7 +189,11 @@ function applySlice(text, slice) {
  * callers can treat both kinds uniformly.
  */
 function loadRows(doc) {
-  const text = loadText(doc);
+  return rowsFromText(doc, loadText(doc));
+}
+
+/** Construct rows from an already loaded source, including verified snapshots. */
+function rowsFromText(doc, text) {
   if (text === null) return null;
   if (doc.source.type !== 'dataset') {
     return [{ id: doc.id, text, register: doc.register, class: doc.class || 'human', model: null, domain: null }];
@@ -450,6 +454,7 @@ module.exports = {
   readManifest,
   loadText,
   loadRows,
+  rowsFromText,
   sha256,
   REGISTERS,
   AUTHORSHIP,
