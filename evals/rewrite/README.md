@@ -255,7 +255,16 @@ plugin, resolved config, no-tools agent, event stream, system and parameter
 audits (including every invocation when OpenCode repeats a hook), call timing,
 session export, model identity, cost, usage and result. A
 missing or contradictory receipt fails closed. Spawn errors and timeouts retain
-a failure record and batch status. Use a new directory for an explicit retry so
+a failure record and batch status. Immutable artifacts use flushed temporary
+files and atomic no-clobber publication. If resume finds a malformed result, it
+moves the exact bytes to `invalid-result.json`, records a hashed failure and
+continues unrelated tasks; it never treats that file as a completed result.
+Interrupted config/plugin setup validates every existing artifact before it
+creates only the missing files, and conflicting contents still fail closed.
+Each run or import performs the full Git-backed plan/provenance check once (six
+pinned-file reads for this protocol); per-task and final row checks reuse that
+already-verified in-memory plan without launching 3,888 redundant Git jobs for
+a 648-task import. `opencode_path` must be absolute. Use a new directory for an explicit retry so
 the rejected attempt remains in the experiment record. A configuration with
 `task_ids` must use `purpose: "diagnostic"`. Zen's free model IDs are moving
 aliases; record that limitation and do not describe them as immutable model

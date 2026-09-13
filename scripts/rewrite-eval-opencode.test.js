@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 const { prepare } = require('./rewrite-eval.js');
 const runner = require('./rewrite-eval-opencode.js');
 
@@ -61,6 +62,7 @@ if (args[0] === '--version') {
   }));
   const raw = '<<<FINAL_REWRITE>>>\\nTransport fixture.\\n<<<END_FINAL_REWRITE>>>';
   const now = Date.now();
+  if (process.cwd().includes('publication-race-run')) fs.writeFileSync(path.join(process.cwd(), 'result.json'), '{"interrupted":');
   fs.writeFileSync(path.join(process.cwd(), 'fake-export.json'), JSON.stringify({
     info: { id: session, cost: 0, version: '1.18.30' },
     messages: [
@@ -101,14 +103,57 @@ const configPath = path.join(root, 'config.json');
 const runDir = path.join(root, 'run');
 const resultsPath = path.join(root, 'results.json');
 fs.writeFileSync(planPath, JSON.stringify(plan));
-fs.writeFileSync(configPath, JSON.stringify({
+const baseConfig = {
   schema_version: 1,
   purpose: 'diagnostic',
   opencode_path: executable,
   opencode_version: '1.18.30',
   timeout_ms: 10_000,
   task_ids: [task.id],
-}));
+};
+fs.writeFileSync(configPath, JSON.stringify(baseConfig));
+
+const atomicTarget = path.join(root, 'atomic-result.json');
+runner.writeExclusiveAtomic(atomicTarget, { first: true });
+assert.deepEqual(JSON.parse(fs.readFileSync(atomicTarget)), { first: true });
+assert.throws(() => runner.writeExclusiveAtomic(atomicTarget, { first: false }), /EEXIST/);
+assert.deepEqual(JSON.parse(fs.readFileSync(atomicTarget)), { first: true }, 'atomic exclusive write must not replace its destination');
+assert.equal(fs.readdirSync(root).some((name) => name.startsWith('atomic-result.json.') && name.endsWith('.tmp')), false, 'atomic write must clean its temporary file');
+
+const relativeConfig = { ...baseConfig, opencode_path: './opencode' };
+assert.throws(() => runner.checkConfig(relativeConfig, plan), /must be absolute/);
+
+const configOnlyRun = path.join(root, 'config-only-run');
+fs.mkdirSync(configOnlyRun);
+fs.writeFileSync(path.join(configOnlyRun, 'runner-config.json'), JSON.stringify(baseConfig));
+assert.equal(runner.run(planPath, configPath, configOnlyRun)[0].status, 'complete');
+assert.equal(fs.readFileSync(path.join(configOnlyRun, 'opencode-rewrite-eval-plugin.mjs'), 'utf8'), runner.pluginSource());
+
+const pluginOnlyRun = path.join(root, 'plugin-only-run');
+fs.mkdirSync(pluginOnlyRun);
+fs.writeFileSync(path.join(pluginOnlyRun, 'opencode-rewrite-eval-plugin.mjs'), runner.pluginSource());
+assert.equal(runner.run(planPath, configPath, pluginOnlyRun)[0].status, 'complete');
+assert.deepEqual(JSON.parse(fs.readFileSync(path.join(pluginOnlyRun, 'runner-config.json'))), baseConfig);
+
+const conflictingConfigRun = path.join(root, 'conflicting-config-run');
+fs.mkdirSync(conflictingConfigRun);
+fs.writeFileSync(path.join(conflictingConfigRun, 'runner-config.json'), JSON.stringify({ ...baseConfig, timeout_ms: 1 }));
+assert.throws(() => runner.run(planPath, configPath, conflictingConfigRun), /different runner config/);
+assert.equal(fs.existsSync(path.join(conflictingConfigRun, 'opencode-rewrite-eval-plugin.mjs')), false, 'conflicting config must fail before creating a missing plugin');
+
+const conflictingPluginRun = path.join(root, 'conflicting-plugin-run');
+fs.mkdirSync(conflictingPluginRun);
+fs.writeFileSync(path.join(conflictingPluginRun, 'opencode-rewrite-eval-plugin.mjs'), 'export default {};\n');
+assert.throws(() => runner.run(planPath, configPath, conflictingPluginRun), /existing run plugin differs/);
+assert.equal(fs.existsSync(path.join(conflictingPluginRun, 'runner-config.json')), false, 'conflicting plugin must fail before creating a missing config');
+
+const publicationRaceRun = path.join(root, 'publication-race-run');
+const publicationRaceStatus = runner.run(planPath, configPath, publicationRaceRun);
+assert.equal(publicationRaceStatus[0].status, 'failed');
+const publicationRaceTask = path.join(publicationRaceRun, 'tasks', runner.safeId(task.id));
+assert.equal(fs.existsSync(path.join(publicationRaceTask, 'result.json')), false, 'a no-clobber collision must not leave result/failure contradiction');
+assert.equal(fs.readFileSync(path.join(publicationRaceTask, 'invalid-result.json'), 'utf8'), '{"interrupted":');
+assert.equal(JSON.parse(fs.readFileSync(path.join(publicationRaceTask, 'failure.json'))).kind, 'invalid_existing_result');
 
 const statuses = runner.run(planPath, configPath, runDir);
 assert.deepEqual(statuses, [{ task_id: task.id, status: 'complete' }]);
@@ -130,8 +175,14 @@ const systemAuditPath = path.join(taskDir, 'system-audit.json');
 const systemAudit = fs.readFileSync(systemAuditPath);
 fs.rmSync(systemAuditPath);
 assert.throws(() => runner.importResults(planPath, runDir, path.join(root, 'missing-audit-results.json')), /system-audit\.json/);
-assert.throws(() => runner.run(planPath, configPath, runDir), /system-audit\.json/);
+const missingAuditStatus = runner.run(planPath, configPath, runDir);
+assert.equal(missingAuditStatus[0].status, 'failed');
+assert.equal(fs.existsSync(path.join(taskDir, 'result.json')), false, 'invalid result must leave the success pathname');
+assert.equal(fs.existsSync(path.join(taskDir, 'invalid-result.json')), true, 'invalid result evidence must be quarantined');
+assert.equal(JSON.parse(fs.readFileSync(path.join(taskDir, 'failure.json'))).kind, 'invalid_existing_result');
 fs.writeFileSync(systemAuditPath, systemAudit);
+fs.renameSync(path.join(taskDir, 'invalid-result.json'), path.join(taskDir, 'result.json'));
+fs.rmSync(path.join(taskDir, 'failure.json'));
 
 const callAuditPath = path.join(taskDir, 'call-audit.json');
 const callAudit = fs.readFileSync(callAuditPath);
@@ -157,6 +208,52 @@ fs.writeFileSync(systemAuditPath, systemAudit);
 
 fs.writeFileSync(path.join(taskDir, 'failure.json'), '{}');
 assert.throws(() => runner.run(planPath, configPath, runDir), /result\.json and failure\.json cannot both exist/);
+
+const secondTask = plan.tasks[1];
+const batchConfig = { ...baseConfig, task_ids: [task.id, secondTask.id] };
+const batchConfigPath = path.join(root, 'batch-config.json');
+const batchRun = path.join(root, 'batch-run');
+fs.writeFileSync(batchConfigPath, JSON.stringify(batchConfig));
+const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
+const gitWrapperDir = path.join(root, 'git-wrapper');
+const gitWrapper = path.join(gitWrapperDir, 'git');
+const gitCountPath = path.join(root, 'git-count.txt');
+fs.mkdirSync(gitWrapperDir);
+fs.writeFileSync(gitWrapper, `#!/usr/bin/env node
+const fs = require('node:fs');
+const { spawnSync } = require('node:child_process');
+fs.appendFileSync(process.env.REWRITE_EVAL_GIT_COUNT_FILE, '1\\n');
+const result = spawnSync(${JSON.stringify(realGit)}, process.argv.slice(2), { stdio: 'inherit' });
+if (result.error) throw result.error;
+process.exitCode = result.status ?? 1;
+`);
+fs.chmodSync(gitWrapper, 0o755);
+const originalPath = process.env.PATH;
+process.env.PATH = `${gitWrapperDir}${path.delimiter}${originalPath}`;
+process.env.REWRITE_EVAL_GIT_COUNT_FILE = gitCountPath;
+try {
+  assert.deepEqual(runner.run(planPath, batchConfigPath, batchRun).map((item) => item.status), ['complete', 'complete']);
+} finally {
+  process.env.PATH = originalPath;
+  delete process.env.REWRITE_EVAL_GIT_COUNT_FILE;
+}
+assert.equal(fs.readFileSync(gitCountPath, 'utf8').trim().split('\n').length, 6, 'one run must verify six pinned files through Git exactly once, not once per task');
+
+const firstBatchTaskDir = path.join(batchRun, 'tasks', runner.safeId(task.id));
+const secondBatchTaskDir = path.join(batchRun, 'tasks', runner.safeId(secondTask.id));
+const truncatedResult = '{"truncated":';
+fs.writeFileSync(path.join(firstBatchTaskDir, 'result.json'), truncatedResult);
+fs.rmSync(secondBatchTaskDir, { recursive: true });
+const resumedBatch = runner.run(planPath, batchConfigPath, batchRun);
+assert.deepEqual(resumedBatch.map((item) => item.status), ['failed', 'complete'], 'a malformed result must not abort later tasks');
+assert.equal(fs.existsSync(path.join(firstBatchTaskDir, 'result.json')), false, 'malformed result must not retain the success filename');
+assert.equal(fs.readFileSync(path.join(firstBatchTaskDir, 'invalid-result.json'), 'utf8'), truncatedResult, 'malformed result bytes must be retained');
+const invalidResultFailure = JSON.parse(fs.readFileSync(path.join(firstBatchTaskDir, 'failure.json')));
+assert.equal(invalidResultFailure.kind, 'invalid_existing_result');
+assert.match(invalidResultFailure.invalid_result_sha256, /^[0-9a-f]{64}$/);
+assert.equal(fs.existsSync(path.join(secondBatchTaskDir, 'result.json')), true, 'later task must still complete');
+assert.deepEqual(JSON.parse(fs.readFileSync(path.join(batchRun, 'status.json'))).statuses.map((item) => item.status), ['failed', 'complete']);
+assert.deepEqual(runner.run(planPath, batchConfigPath, batchRun).map((item) => item.status), ['failed', 'complete'], 'quarantined result must remain a stable failed resume state');
 
 const invalidPlan = structuredClone(plan);
 invalidPlan.models[0].version = 'definitely-charge-me-free';

@@ -31,7 +31,32 @@ function read(file) {
 }
 
 function writeExclusive(file, value) {
-  fs.writeFileSync(file, typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx' });
+  writeExclusiveAtomic(file, value);
+}
+
+// Publish a fully flushed inode without ever opening the destination for a
+// partial write or replacing an existing artifact. The temporary hard link and
+// destination are in the same directory/filesystem.
+function writeExclusiveAtomic(file, value) {
+  const content = typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`;
+  const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  let descriptor;
+  let created = false;
+  try {
+    descriptor = fs.openSync(temporary, 'wx');
+    created = true;
+    fs.writeFileSync(descriptor, content);
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    fs.linkSync(temporary, file);
+  } finally {
+    try {
+      if (descriptor !== undefined) fs.closeSync(descriptor);
+    } finally {
+      if (created) fs.rmSync(temporary, { force: true });
+    }
+  }
 }
 
 function writeAtomic(file, value) {
@@ -49,6 +74,7 @@ function checkConfig(config, plan) {
   assert.equal(config.schema_version, 1, 'runner config schema_version must be 1');
   assert(['diagnostic', 'comparison'].includes(config.purpose), 'runner config purpose must be diagnostic or comparison');
   assert(typeof config.opencode_path === 'string' && config.opencode_path, 'runner config opencode_path required');
+  assert(path.isAbsolute(config.opencode_path), 'runner config opencode_path must be absolute');
   assert.equal(config.opencode_version, '1.18.30', 'this adapter is pinned to OpenCode 1.18.30');
   assert(Number.isInteger(config.timeout_ms) && config.timeout_ms > 0, 'runner config timeout_ms must be positive');
   if (config.task_ids !== undefined) {
@@ -275,13 +301,11 @@ function initialize(planPath, configPath, runDir) {
   fs.mkdirSync(runDir, { recursive: true });
   const manifestPath = path.join(runDir, 'manifest.json');
   const pluginPath = path.join(runDir, 'opencode-rewrite-eval-plugin.mjs');
-  if (!fs.existsSync(pluginPath)) {
-    writeExclusive(path.join(runDir, 'runner-config.json'), config);
-    writeExclusive(pluginPath, pluginSource());
-  } else {
-    assert.deepEqual(read(path.join(runDir, 'runner-config.json')), config, 'existing run directory has a different runner config');
-    assert.equal(fs.readFileSync(pluginPath, 'utf8'), pluginSource(), 'existing run plugin differs');
-  }
+  const runnerConfigPath = path.join(runDir, 'runner-config.json');
+  if (fs.existsSync(runnerConfigPath)) assert.deepEqual(read(runnerConfigPath), config, 'existing run directory has a different runner config');
+  if (fs.existsSync(pluginPath)) assert.equal(fs.readFileSync(pluginPath, 'utf8'), pluginSource(), 'existing run plugin differs');
+  if (!fs.existsSync(runnerConfigPath)) writeExclusive(runnerConfigPath, config);
+  if (!fs.existsSync(pluginPath)) writeExclusive(pluginPath, pluginSource());
 
   const env = isolatedEnvironment(runDir, pluginPath);
   const version = requireCommand(command(config.opencode_path, ['--version'], { env, cwd: runDir, timeout: config.timeout_ms }), 'opencode --version failed');
@@ -433,8 +457,50 @@ function validateTaskEvidence(plan, config, task, taskDir) {
   };
   const result = read(resultPath);
   assert.deepEqual(result, expected, `${task.id}: result is not derived from the retained receipts`);
-  checkResults(plan, [result]);
+  // initialize/import already performed the Git-backed provenance check once
+  // for this operation. Re-derive the plan and validate this row in memory
+  // without spawning six redundant `git show` processes per task.
+  checkResults(plan, [result], { git: false });
   return result;
+}
+
+function fileSha256(file) {
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
+
+function finishInvalidResultQuarantine(task, taskDir, failure) {
+  const resultPath = path.join(taskDir, 'result.json');
+  const invalidPath = path.join(taskDir, 'invalid-result.json');
+  assert.equal(failure.kind, 'invalid_existing_result', `${task.id}: result/failure contradiction is not a recognized quarantine`);
+  assert.equal(failure.task_id, task.id, `${task.id}: invalid-result failure belongs to another task`);
+  assert(typeof failure.error === 'string' && failure.error, `${task.id}: invalid-result failure has no error`);
+  assert(/^[0-9a-f]{64}$/.test(failure.invalid_result_sha256), `${task.id}: invalid-result failure has no evidence hash`);
+  if (fs.existsSync(resultPath)) {
+    assert.equal(fileSha256(resultPath), failure.invalid_result_sha256, `${task.id}: result changed during invalid-result quarantine`);
+    if (fs.existsSync(invalidPath)) assert.equal(fileSha256(invalidPath), failure.invalid_result_sha256, `${task.id}: quarantined result differs`);
+    else fs.linkSync(resultPath, invalidPath);
+    fs.unlinkSync(resultPath);
+  }
+  assert(fs.existsSync(invalidPath), `${task.id}: quarantined invalid-result evidence missing`);
+  assert.equal(fileSha256(invalidPath), failure.invalid_result_sha256, `${task.id}: quarantined result hash differs`);
+  return { task_id: task.id, status: 'failed', error: failure.error };
+}
+
+function quarantineInvalidResult(task, taskDir, error) {
+  const resultPath = path.join(taskDir, 'result.json');
+  const failurePath = path.join(taskDir, 'failure.json');
+  assert(fs.existsSync(resultPath), `${task.id}: cannot quarantine a missing result`);
+  assert(!fs.existsSync(failurePath), `${task.id}: cannot create an invalid-result failure over an existing failure`);
+  const failure = {
+    kind: 'invalid_existing_result',
+    task_id: task.id,
+    recorded_at: new Date().toISOString(),
+    error,
+    invalid_result_sha256: fileSha256(resultPath),
+    evidence_retained: [...fs.readdirSync(taskDir), 'invalid-result.json'].filter((name) => name !== 'result.json').sort(),
+  };
+  writeExclusive(failurePath, failure);
+  return finishInvalidResultQuarantine(task, taskDir, failure);
 }
 
 function runTask(context, task) {
@@ -444,10 +510,18 @@ function runTask(context, task) {
   fs.mkdirSync(taskDir, { recursive: true });
   const resultPath = path.join(taskDir, 'result.json');
   const failurePath = path.join(taskDir, 'failure.json');
-  if (fs.existsSync(resultPath) && fs.existsSync(failurePath)) throw new Error(`${task.id}: result.json and failure.json cannot both exist`);
+  if (fs.existsSync(failurePath)) {
+    const failure = read(failurePath);
+    if (failure.kind === 'invalid_existing_result') return finishInvalidResultQuarantine(task, taskDir, failure);
+    if (fs.existsSync(resultPath)) throw new Error(`${task.id}: result.json and failure.json cannot both exist`);
+  }
   if (fs.existsSync(resultPath)) {
-    validateTaskEvidence(plan, config, task, taskDir);
-    return { task_id: task.id, status: 'complete' };
+    try {
+      validateTaskEvidence(plan, config, task, taskDir);
+      return { task_id: task.id, status: 'complete' };
+    } catch (error) {
+      return quarantineInvalidResult(task, taskDir, `retained result failed resume validation: ${error.message}`);
+    }
   }
   if (fs.existsSync(failurePath)) return { task_id: task.id, status: 'failed' };
   const existing = fs.readdirSync(taskDir);
@@ -531,10 +605,21 @@ function runTask(context, task) {
         output_tokens: assistant.info.tokens.output,
       },
     };
-    checkResults(plan, [result]);
-    writeExclusive(resultPath, result);
+    checkResults(plan, [result], { git: false });
+    writeExclusiveAtomic(resultPath, result);
     return { task_id: task.id, status: 'complete' };
   } catch (error) {
+    // A no-clobber publication can report EEXIST, or cleanup can fail after a
+    // successful link. Never add a contradictory failure beside result.json:
+    // accept an independently valid result, otherwise quarantine its bytes.
+    if (fs.existsSync(resultPath)) {
+      try {
+        validateTaskEvidence(plan, config, task, taskDir);
+        return { task_id: task.id, status: 'complete' };
+      } catch (validationError) {
+        return quarantineInvalidResult(task, taskDir, `result publication failed (${error.message}); retained result is invalid: ${validationError.message}`);
+      }
+    }
     writeExclusive(failurePath, {
       task_id: task.id,
       recorded_at: recordedAt,
@@ -575,8 +660,8 @@ function importResults(planPath, runDir, outputPath) {
     task,
     path.join(runDir, 'tasks', safeId(task.id)),
   ));
-  checkResults(plan, results);
-  writeExclusive(outputPath, results);
+  checkResults(plan, results, { git: false });
+  writeExclusiveAtomic(outputPath, results);
   return results;
 }
 
@@ -606,5 +691,5 @@ if (require.main === module) {
 
 module.exports = {
   AGENT, TRANSPORT, checkConfig, effectiveParams, importResults, openCodeConfig,
-  parseEvents, pluginSource, run, safeId,
+  parseEvents, pluginSource, run, safeId, writeExclusiveAtomic,
 };
