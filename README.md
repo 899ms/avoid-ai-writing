@@ -396,7 +396,7 @@ recalibration work such as #70.
 ```yaml
 # .github/workflows/prose.yml
 steps:
-  - uses: actions/checkout@v4
+  - uses: actions/checkout@v7
   - uses: conorbronsdon/avoid-ai-writing@main
     with:
       glob: "**/*.md"
