@@ -262,6 +262,14 @@ test('mid-paragraph ordinals do not start a list run', () => {
   const afterCode = prepareUnits(`    code\n2. Second item ${words(50)}`).decisions;
   assert.ok(afterCode.some((item) => item.kinds.includes('indented-code')));
   assert.ok(afterCode.some((item) => item.kinds.includes('list')));
+
+  for (const marker of ['2. Ordered item', '1859. Historical record']) {
+    const afterColon = prepareUnits(`Context:\n${marker} ${words(48, 'tail')}`).decisions;
+    assert.equal(afterColon.length, 1);
+    assert.deepEqual(afterColon[0].kinds, ['colon-inferred', 'prose']);
+    assert.equal(afterColon[0].headingAttached, true);
+    assert.equal(afterColon[0].kinds.includes('list'), false);
+  }
 });
 
 test('mixed prose and five short bullets remain one eligible source body', () => {

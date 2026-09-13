@@ -44,10 +44,12 @@ then select units. Explicit Markdown headings, blockquotes, lists, indented
 code, and complete fenced regions retain their line structure. CRLF and lone
 CR become LF. Fences stay intact across blank lines, including an unclosed
 fence that runs to the end of the document. A bullet or an ordered marker whose
-start number is 1 can interrupt prose; another ordered marker starts a list at a
-block boundary, following the relevant [CommonMark list-item
+start number is 1 can interrupt prose; another ordered marker starts a list at
+an explicit block boundary, following the relevant [CommonMark list-item
 rule](https://spec.commonmark.org/0.31.2/#list-items). Thus a hard-wrapped line
-that starts `1859.` remains prose.
+that starts `1859.` remains prose. Colon-heading inference runs after explicit
+structure is classified. Because that heuristic depends on the following line,
+it does not turn an otherwise prose `2.` or `1859.` line into a list boundary.
 
 Document mode preserves the ordered words and markers in the input; it applies
 no paragraph word limit. Paragraph mode retains bodies of 50–400 whitespace
@@ -90,9 +92,10 @@ provenance, input and detector word counts, score, categories, and skip reason.
 Spans use JavaScript UTF-16 offsets into the original row, with an inclusive
 start and exclusive end. Unit IDs use source identity and spans; indexes are
 only local ordering hints. Normalized text has its own hash. The shared
-measurement-harness fingerprint is separate from the branch-specific legacy
-and current preprocessor fingerprints. Unavailable sources have separate
-records and do not count as skipped units.
+measurement-harness fingerprint covers `fp-measure.js` and `fp-preprocess.js`,
+including both preprocessing sources. Branch-specific preprocessor fingerprints
+identify which normalization implementation each run selected. Unavailable
+sources have separate records and do not count as skipped units.
 
 The comparison command runs both preprocessing paths with the same detector
 and available corpus. Its legacy path reproduces main at `fabd62d9`:
@@ -105,7 +108,9 @@ Compare selected and skipped populations alongside category counts, source
 and register rates, and individual changed spans. A rate change may reflect a
 different set of units or restored Markdown boundaries. It does not by itself
 establish better authorship detection. Missing sources remain visible and
-limit the comparison.
+limit the comparison. The summary caps detailed change examples, while its
+compact `absorbedHeadings` mapping retains every skipped heading folded into a
+paired current unit.
 
 ## Register is the unit of analysis
 

@@ -131,6 +131,13 @@ test('pairs an attached heading with its unique legacy body without changing eit
   assert.strictEqual(absorbed.impact, 'segmentation');
   assert.strictEqual(changes.byImpact.population, 0);
   assert.strictEqual(changes.byImpact.segmentation, 1);
+
+  const capped = changeSet([legacyHeading, legacyBody], [current], 0);
+  assert.deepStrictEqual(capped.examples, []);
+  assert.deepStrictEqual(capped.absorbedHeadings, [{
+    legacyKey: absorbed.key,
+    currentKey: absorbed.absorbedInto,
+  }]);
 });
 
 test('leaves ambiguous attachment candidates unpaired and counts each record once', () => {
@@ -229,6 +236,11 @@ test('summary and decision artifacts contain hashes and diagnostics without corp
   const summary = JSON.parse(fs.readFileSync(written.summaryPath, 'utf8'));
   assert.strictEqual(summary.modes.paragraph.decisions, undefined);
   assert.ok(summary.modes.paragraph.metadata.manifestHash);
+  assert.ok(summary.modes.paragraph.comparison.changes.absorbedHeadings.length > 0);
+  assert.deepStrictEqual(
+    summary.modes.paragraph.comparison.changes.absorbedHeadings,
+    result.modes.paragraph.comparison.changes.absorbedHeadings,
+  );
   const decisions = fs.readFileSync(written.decisionsPath, 'utf8').trim().split('\n').map(JSON.parse);
   assert.strictEqual(decisions[0].recordKind, 'meta');
   assert.ok(decisions.some((record) => record.recordKind === 'unit' && record.normalizedHash));

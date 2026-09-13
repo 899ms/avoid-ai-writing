@@ -300,7 +300,16 @@ function changeSet(legacyRecords, currentRecords, exampleLimit = 40) {
     byImpact[change.impact]++;
   }
   changes.sort((a, b) => changePriority(a) - changePriority(b) || identity(a.current || a.legacy).localeCompare(identity(b.current || b.legacy)));
-  return { counts, byImpact, total: changes.length, examples: changes.slice(0, exampleLimit) };
+  const absorbedHeadings = changes
+    .filter((change) => change.absorbedInto)
+    .map((change) => ({ legacyKey: change.key, currentKey: change.absorbedInto }));
+  return {
+    counts,
+    byImpact,
+    total: changes.length,
+    absorbedHeadings,
+    examples: changes.slice(0, exampleLimit),
+  };
 }
 
 function assertCommonInputs(legacy, current) {
