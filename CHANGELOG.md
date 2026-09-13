@@ -6,6 +6,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Rename the user-facing "Emotional flatline" category to "Stock reaction framing" while preserving its `emotional-flatline` API type. Keep specific reactions, flag empty framing, and make the style finding neutral in authorship scoring until relevant positive evidence establishes a direction (#82).
+
 ### Added
 
 - Package the deterministic detector as a composite GitHub Action and pre-commit hook, backed by a new `avoid-ai-writing-gate` CLI. The gate uses per-file finding counts rather than the composite score, defaults to `technical` + `rendered-markdown`, and uses a corpus-backed threshold of 6 findings per file (1.9% human-control failure rate across 376 documents, versus 31.4% at zero). Strict zero-findings policies remain available with an explicit threshold of 0. Preservation validation stays separate because it requires before/after inputs (#86).
@@ -14,6 +18,7 @@ All notable changes to this project are documented here.
 
 - Report top detection categories for documents the self-scan scores in chunks. `scoreLongText()` now counts issue types across every accepted chunk, so `scanFile()` returns a populated `topTypes` for a chunked file and the `--check` over-budget diagnostic names categories instead of printing `none` (#264).
 - Validate CLI `--unit` argument in `scripts/fp-measure.js` before starting measurement, exiting with code 2 on missing, unrecognized, or repeated values, and on `--unit=VALUE` syntax (`paragraph` and `document` accepted).
+- Accept acronyms (`AI`, `API`, `CLI`) and the capitalised single-letter function word `A` as interior tokens in the Title Case header rule, so headings like `## The Future Of AI In Production` and `## Why Your Team Needs A Better Testing Strategy` are flagged like the original tell. First and last tokens still require an ordinary Title Case word, so all-caps banner lines such as `## HTTP API REFERENCE` stay clean (#240).
 - Consume bodyless punctuation runs once when splitting sentence highlights, avoiding the quadratic punctuation-prefix regression introduced in #260 while preserving trailing-fragment boundaries.
 - Remove four quadratic scans from `analyzeText()`: the sentence splitter behind highlight regions, its boundary-whitespace trim in rendered-Markdown mode, the Markdown table delimiter test, and the line-anchored `Interesting part:` opener all rescanned a long whitespace or blank-line run from every position, so a document that ended in blank lines or carried a large masked comment block took seconds instead of milliseconds. Sentence boundaries are unchanged; the regression test compares them against the former regex on every boundary shape and asserts linear growth by ratio rather than by a wall-clock budget (#235).
 - Preserve detector issue indexes and sentence-highlight ranges against the original source after blockquote and normalization preprocessing (#189).

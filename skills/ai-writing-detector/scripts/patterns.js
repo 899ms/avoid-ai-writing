@@ -352,7 +352,11 @@ const AIDetector = (() => {
     'significance-inflation': 4,
     'vague-attribution': 5,
     'hollow-intensifier': 2,
-    'emotional-flatline': 2,
+    // Issue #82 evidence boundary: this style pattern produced no detector hits
+    // in either corpus class, so it has no measured authorship direction. Keep
+    // the finding visible, but do not move authorship scores or probabilities
+    // until a relevant positive evaluation set supports a direction.
+    'emotional-flatline': 0,
     'lingering-attention': 3,
     'novelty-inflation': 3,
     'cutoff-disclaimer': 10,
@@ -1443,7 +1447,11 @@ const AIDetector = (() => {
   //
   // Setext headings (`Title`/`=====`) need no prefix: their text line is bare
   // and already matched by this same pattern.
-  const TITLE_CASE_HEADER = /^(?:#{1,6}[ \t]+)?([A-Z][a-z]+(?:\s+(?:[A-Z][a-z]+|and|or|of|the|in|for|to|a|an))+\s+[A-Z][a-z]+)\s*$/gm;
+  // Interior tokens accept Title Case words, acronyms (`AI`, `API`, `CLI`) and
+  // the capitalised single-letter function word `A`. The first and last tokens
+  // stay ordinary `[A-Z][a-z]+` words, which also excludes all-caps banner
+  // lines (`## HTTP API REFERENCE`) whose leading token is not Title Case.
+  const TITLE_CASE_HEADER = /^(?:#{1,6}[ \t]+)?([A-Z][a-z]+(?:\s+(?:[A-Z][a-z]+|A|[A-Z]{2,}|and|or|of|the|in|for|to|a|an))+\s+[A-Z][a-z]+)\s*$/gm;
 
   // ─── Parenthetical hedging asides ──────────────────────────────────
   // "(and increasingly, X)", "(or more precisely, Y)", "(though to be
@@ -2487,10 +2495,9 @@ const AIDetector = (() => {
     // kinds of issue stay out of the AI-highlight regions. Summary signals
     // like "Punctuation density uniform across paragraphs" have no sentence
     // anchor — they contribute to the document-level signal but not to
-    // highlights. Zero-weight style copyedits (unnecessary-hyphenation) do
-    // have an anchor, but they are P2 grammar cleanup rather than evidence
-    // of machine authorship, so they belong in issues[] and nowhere near a
-    // field reserved for AI sentence highlights.
+    // highlights. Any category with authorship weight 0 is style-only by
+    // definition, so it belongs in issues[] but never in a field reserved
+    // for AI sentence highlights.
     // Filter by issue TYPE not text-regex: text-based filtering used to
     // drop legitimate phrase issues containing "across" / "density".
     const NON_HIGHLIGHT_TYPES = new Set([
@@ -2515,6 +2522,7 @@ const AIDetector = (() => {
     for (const issue of issues) {
       if (!issue.text || issue.text.length > 200) continue;
       if (NON_HIGHLIGHT_TYPES.has(issue.type)) continue;
+      if ((ISSUE_WEIGHTS[issue.type] ?? 2) === 0) continue;
       const needle = issue.text.toLowerCase();
       let idx = 0;
       let matched = false;
@@ -2715,7 +2723,9 @@ const AIDetector = (() => {
     'significance-inflation': 'Significance inflation',
     'vague-attribution': 'Vague attribution',
     'hollow-intensifier': 'Hollow intensifier',
-    'emotional-flatline': 'Emotional flatline',
+    // Keep the public type stable for API consumers; the user-facing name now
+    // describes the stock framing that the regexes actually match.
+    'emotional-flatline': 'Stock reaction framing',
     'lingering-attention': 'Lingering-attention claim',
     'novelty-inflation': 'Novelty inflation',
     'cutoff-disclaimer': 'Cutoff disclaimer',
