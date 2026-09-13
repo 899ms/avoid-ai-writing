@@ -347,6 +347,10 @@ function makeDecision(text, spans, kinds, attached, attachedKind, reasonOverride
   };
 }
 
+function shortHeadingReason(text, reason) {
+  return wordCount(text) < MIN_WORDS ? reason : null;
+}
+
 function decisionsForParagraphs(input, lines, classified) {
   const atoms = buildAtoms(lines, classified);
   const decisions = [];
@@ -384,18 +388,19 @@ function decisionsForParagraphs(input, lines, classified) {
           atom.kinds,
           false,
           atom.headingKind,
-          'heading-would-exceed-maximum',
+          shortHeadingReason(headingText, 'heading-would-exceed-maximum'),
         ));
         continue;
       }
 
+      const headingText = normalizedRange(lines, classified, atom.startLine, atom.endLine);
       decisions.push(makeDecision(
-        normalizedRange(lines, classified, atom.startLine, atom.endLine),
+        headingText,
         [sourceSpan(lines, atom.startLine, atom.endLine)],
         atom.kinds,
         false,
         atom.headingKind,
-        'unattached-heading',
+        shortHeadingReason(headingText, 'unattached-heading'),
       ));
       continue;
     }

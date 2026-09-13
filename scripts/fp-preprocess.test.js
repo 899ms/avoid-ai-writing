@@ -151,6 +151,39 @@ test('two and three consecutive headings leave only the nearest attached', () =>
     'colon-inferred', 'colon-inferred', 'colon-inferred',
   ]);
   assert.deepEqual(colonDecisions.map((decision) => decision.headingAttached), [false, false, true]);
+
+  const longHeading = `## ${words(49, 'heading')}`;
+  const consecutiveLong = prepareUnits(`${longHeading}\n${longHeading}\n${words(10, 'body')}`).decisions;
+  assert.equal(consecutiveLong.length, 2);
+  assert.equal(consecutiveLong[0].status, 'selected');
+  assert.equal(consecutiveLong[0].inputWords, 50);
+  assert.equal(consecutiveLong[0].headingAttached, false);
+  assert.equal(consecutiveLong[1].status, 'selected');
+  assert.equal(consecutiveLong[1].headingAttached, true);
+});
+
+test('eligible standalone and detached heading blocks use normal word eligibility', () => {
+  const atx = `## ${words(49)}`;
+  const standaloneAtx = prepareUnits(atx).decisions;
+  assert.equal(standaloneAtx.length, 1);
+  assert.equal(standaloneAtx[0].inputWords, 50);
+  assert.equal(standaloneAtx[0].status, 'selected');
+  assert.equal(standaloneAtx[0].reason, null);
+  assert.equal(standaloneAtx[0].headingKind, 'atx');
+
+  const setext = `${words(49)}\n=====`;
+  const standaloneSetext = prepareUnits(setext).decisions;
+  assert.equal(standaloneSetext.length, 1);
+  assert.equal(standaloneSetext[0].inputWords, 50);
+  assert.equal(standaloneSetext[0].status, 'selected');
+  assert.equal(standaloneSetext[0].headingKind, 'setext');
+
+  const detached = prepareUnits(`${atx}\n${words(400, 'body')}`).decisions;
+  assert.equal(detached.length, 2);
+  assert.deepEqual(detached.map((decision) => decision.status), ['selected', 'selected']);
+  assert.deepEqual(detached.map((decision) => decision.inputWords), [50, 400]);
+  assert.equal(detached[0].headingAttached, false);
+  assert.equal(detached[1].headingAttached, false);
 });
 
 test('colon inference is limited to block starts and labels its diagnostics', () => {
