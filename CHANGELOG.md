@@ -6,11 +6,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-- Allow pre-commit `args` to override the gate defaults by moving the filename separator out of `entry` and into default `args` (#243).
+- Define one editing contract for rewrite and file-edit decisions. Cleanup now separates candidate matches, justified findings, and authorized edits; preserves source-supported facts, attribution, negation, uncertainty, technical terms, intentional rhetoric, protected content, and established voice; allows explicitly requested structure or register changes without invented evidence or experience; respects context skips before voice targets; leaves clean input unchanged when no separate transformation is requested; and no longer requires confirmation solely because a clearly scoped file is large (#202).
+
+## [3.35.0] — 2026-09-13
 
 ### Changed
 
-- Define one editing contract for rewrite and file-edit decisions. Cleanup now separates candidate matches, justified findings, and authorized edits; preserves source-supported facts, attribution, negation, uncertainty, technical terms, intentional rhetoric, protected content, and established voice; allows explicitly requested structure or register changes without invented evidence or experience; respects context skips before voice targets; leaves clean input unchanged when no separate transformation is requested; and no longer requires confirmation solely because a clearly scoped file is large (#202).
+- Allow pre-commit `args` to override the gate defaults by moving the filename separator out of `entry` and into default `args` (#243).
 - Add npm package keywords, homepage, issue tracker, and author metadata.
 - Rename the user-facing "Emotional flatline" category to "Stock reaction framing" while preserving its `emotional-flatline` API type. Keep specific reactions, flag empty framing, and make the style finding neutral in authorship scoring until relevant positive evidence establishes a direction (#82).
 
