@@ -13,6 +13,8 @@ const MAX_WORDS = 400;
 
 const ATX = /^ {0,3}#{1,6}(?:[ \t]+|$)/;
 const FENCE = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/;
+const BULLET_LIST = /^[ \t]*[-+*•][ \t]+/;
+const ORDERED_LIST = /^[ \t]*(\d+)[.)][ \t]+/;
 const LIST = /^[ \t]*(?:[-+*•]|\d+[.)])[ \t]+/;
 const LIST_CONTINUATION = /^(?: {2,}|\t)\S/;
 const QUOTE = /^[ \t]*>/;
@@ -67,10 +69,35 @@ function addKind(kinds, kind) {
   if (!kinds.includes(kind)) kinds.push(kind);
 }
 
+function potentialIndentedCodeLines(lines) {
+  const result = lines.map(() => false);
+  for (let i = 0; i < lines.length; i++) {
+    result[i] = !isBlank(lines[i])
+      && INDENTED.test(lines[i].text)
+      && (i === 0 || isBlank(lines[i - 1]) || result[i - 1]);
+  }
+  return result;
+}
+
+// An ordered marker other than numeric 1 cannot interrupt an open paragraph.
+// This narrow distinction follows https://spec.commonmark.org/0.31.2/#list-items
+// and keeps a hard-wrapped year such as `1859.` in prose.
+function startsListRun(lines, kinds, indentedCode, index) {
+  if (BULLET_LIST.test(lines[index].text)) return true;
+  const ordered = lines[index].text.match(ORDERED_LIST);
+  if (!ordered) return false;
+  if (Number(ordered[1]) === 1 || index === 0 || isBlank(lines[index - 1])) return true;
+  const previousKinds = kinds[index - 1];
+  return previousKinds.length > 0
+    || QUOTE.test(lines[index - 1].text)
+    || indentedCode[index - 1];
+}
+
 /** Classify lines without changing their source offsets. */
 function classify(lines) {
   const kinds = lines.map(() => []);
   const fences = new Map();
+  const indentedCode = potentialIndentedCodeLines(lines);
 
   // A fence closes only with the same marker and at least the opener length.
   // Different or shorter markers inside it are content. An unclosed fence owns
@@ -118,7 +145,7 @@ function classify(lines) {
   // subsequent items or indented continuation. This keeps line structure and
   // prevents continuation text from being folded as an unrelated paragraph.
   for (let i = 0; i < lines.length; i++) {
-    if (kinds[i].length || !LIST.test(lines[i].text)) continue;
+    if (kinds[i].length || !startsListRun(lines, kinds, indentedCode, i)) continue;
     let j = i;
     while (j < lines.length) {
       if (kinds[j].some((kind) => kind.endsWith('heading') || kind === 'fenced-code')) break;
@@ -274,6 +301,7 @@ function buildAtoms(lines, classified) {
     }
 
     const start = i;
+    let mergedContinuation = false;
     let sawList = false;
     let sawQuote = false;
     let sawIndented = false;
@@ -302,6 +330,7 @@ function buildAtoms(lines, classified) {
       const mergeFits = structuralContinuation
         && wordCount(normalizedRange(lines, classified, start, prospectiveEnd)) <= MAX_WORDS;
       if (mergeFits) {
+        mergedContinuation = true;
         i = next;
         continue;
       }
@@ -314,12 +343,13 @@ function buildAtoms(lines, classified) {
       kinds: collectKinds(classified, start, i),
       isHeading: false,
       headingKind: null,
+      mergedContinuation,
     });
   }
   return atoms;
 }
 
-function makeDecision(text, spans, kinds, attached, attachedKind, reasonOverride) {
+function makeDecision(text, spans, kinds, attached, attachedKind, reasonOverride, mergedContinuation = false) {
   const inputWords = wordCount(text);
   let status = 'selected';
   let reason = null;
@@ -341,6 +371,7 @@ function makeDecision(text, spans, kinds, attached, attachedKind, reasonOverride
     kinds,
     headingAttached: attached,
     headingKind: attachedKind,
+    ...(mergedContinuation ? { mergedContinuation: true } : {}),
     inputWords,
     status,
     reason,
@@ -377,6 +408,8 @@ function decisionsForParagraphs(input, lines, classified) {
             kinds,
             true,
             atom.headingKind,
+            null,
+            next.mergedContinuation,
           ));
           i += 1;
           continue;
@@ -411,6 +444,8 @@ function decisionsForParagraphs(input, lines, classified) {
       atom.kinds,
       false,
       null,
+      null,
+      atom.mergedContinuation,
     ));
   }
 

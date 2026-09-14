@@ -436,8 +436,16 @@ repos:
 
 Pin `rev` to a release tag or commit SHA in shared repositories. The hook scans
 staged `.md` / `.mdx` files with the same **6-findings** corpus-backed default.
-Override the entry in your pre-commit config when you need a stricter or more
-permissive finding threshold.
+Use `args` to override the threshold, context, or source mode:
+
+```yaml
+      - id: avoid-ai-writing
+        args: ["--threshold", "0", "--context", "technical", "--source-mode", "plain", "--"]
+```
+
+Pre-commit replaces the hook's default `args: ["--"]` when you provide `args`.
+End an overriding list with `"--"` to protect filenames that begin with a dash.
+The entry keeps its defaults; later options in `args` take precedence.
 
 The gate only **detects**. Preservation validation still requires an original and
 a rewritten file and remains a separate command:

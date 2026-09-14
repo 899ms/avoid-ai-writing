@@ -100,6 +100,10 @@ t('stable identities use original spans and retain class metadata', () => {
   const rows = [{ id: 'paired-answer', class: 'machine', register: 'academic', model: 'fixture-model', text }];
   const current = fixture(rows);
   const legacy = fixture(rows, { preprocess: 'legacy' });
+  assert.notStrictEqual(current.metadata.preprocessorHash, legacy.metadata.preprocessorHash);
+  assert.strictEqual(current.metadata.preprocessorImplementation, 'structural-module');
+  assert.strictEqual(legacy.metadata.preprocessorImplementation, 'legacy-inline');
+  assert.strictEqual(current.metadata.measurementHarnessHash, legacy.metadata.measurementHarnessHash);
   assert.deepStrictEqual(current.records.map((r) => r.unitId), legacy.records.map((r) => r.unitId));
   for (const record of current.records) {
     assert.strictEqual(record.cls, 'machine');

@@ -2620,6 +2620,39 @@ test('#235: table delimiter rows still mask with surrounding whitespace and CR',
   assert.equal(prose.length, 1, `prose next to a single-cell delimiter still edits: ${JSON.stringify(prose)}`);
 });
 
+test('#237: technical context mode suppresses technical-legitimate vocabulary terms', () => {
+  const text = 'We built a robust, comprehensive, seamless pipeline that can leverage the ecosystem to facilitate and streamline the work that underpin delivery. '.repeat(3);
+
+  const generalResult = AIDetector.analyzeText(text, { contextMode: 'general' });
+  const technicalResult = AIDetector.analyzeText(text, { contextMode: 'technical' });
+
+  // Verify all eight exception terms fire under general mode
+  const genIssueTexts = generalResult.issues.map((i) => i.text.toLowerCase());
+  const exemptTerms = ['robust', 'comprehensive', 'seamless', 'leverage', 'ecosystem', 'facilitate', 'streamline', 'underpin'];
+  for (const term of exemptTerms) {
+    assert.ok(genIssueTexts.includes(term), `general mode must report issue for "${term}"`);
+  }
+
+  // Verify all eight exception terms stay suppressed under technical mode
+  assert.equal(technicalResult.score, 0, 'technical mode must score 0 on technical-legitimate terms');
+  assert.equal(technicalResult.issues.length, 0, 'technical mode must report 0 issues for technical-legitimate terms');
+
+  // Verify inflections also stay clean under technical mode
+  const inflections = 'Leveraging the leveraged leverages of the ecosystems and seamlessly streamlining what facilitates and underpins the underpinning underpinnings.';
+  const techInflect = AIDetector.analyzeText(inflections, { contextMode: 'technical' });
+  assert.equal(techInflect.issues.length, 0, `technical mode must suppress inflections: ${JSON.stringify(techInflect.issues.map((i) => i.text))}`);
+
+  // Non-exempt terms must STILL fire under technical mode
+  // Include harness alongside another Tier 2 term (navigate) to satisfy cluster threshold (2+ per paragraph)
+  const nonExemptText = 'We delve into the tapestry and beacon to embark on a testament to a game-changer. We harness the power to navigate.';
+  const techNonExempt = AIDetector.analyzeText(nonExemptText, { contextMode: 'technical' });
+  const nonExemptIssueTexts = techNonExempt.issues.map((i) => i.text.toLowerCase());
+  const requiredNonExempt = ['delve', 'tapestry', 'beacon', 'embark', 'testament to', 'game-changer', 'harness'];
+  for (const term of requiredNonExempt) {
+    assert.ok(nonExemptIssueTexts.includes(term), `technical mode must still flag non-exempt term "${term}"`);
+  }
+});
+
 if (failed > 0) {
   console.error(`\n${failed} test(s) failed`);
   process.exit(1);
