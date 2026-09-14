@@ -10,6 +10,10 @@ All notable changes to this project are documented here.
 
 - Add machine-readable `--json` output to `avoid-ai-writing-gate` and expose `pass`, `total-findings`, and `failed-files` step outputs in the GitHub Action (#252).
 
+### Changed
+
+- Make acknowledgment loops a judgment-only rule. The detector no longer reports the `acknowledgment-loop` type: its three phrases also open ordinary email, support, and docs replies ("To answer your question from Tuesday: ...", "You're asking about the retry limit. It is five by default ..."), and "the question of whether" is standard analytical English. The engine now exposes 53 issue types. The skill keeps the rule, with the deletion test and carve-outs (#239).
+
 ### Fixed
 
 - Report the underlying OpenCode export launch error instead of a secondary `stderr.trim()` exception during rewrite evaluation.
