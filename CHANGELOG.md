@@ -18,6 +18,8 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- Suppress eight technical-legitimate vocabulary terms (`robust`, `comprehensive`, `seamless`, `ecosystem`, `leverage`, `facilitate`, `underpin`, `streamline`) when analyzing text under `--context technical` mode (#237).
+
 - Keep mid-paragraph years and other ordered markers above one in prose during false-positive measurement; expose blank-separated continuation merges and distinct measurement/preprocessor fingerprints; and pair attached headings with their unique legacy body span in comparison output without changing source spans or unit IDs (#293).
 - Preserve Markdown structure and document content during corpus measurement. Separate structural cleanup from paragraph selection, retain eligible 400-word bodies after headings, and account for oversized units without silently deleting text. Keep tab-indented fences atomic, reject source hash mismatches, and construct scored rows from the verified source snapshot (#178, #179, #180, #288, #289).
 - Report top detection categories for documents the self-scan scores in chunks. `scoreLongText()` now counts issue types across every accepted chunk, so `scanFile()` returns a populated `topTypes` for a chunked file and the `--check` over-budget diagnostic names categories instead of printing `none` (#264).

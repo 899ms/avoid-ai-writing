@@ -146,6 +146,26 @@ const AIDetector = (() => {
     return map ? { text: out, flags, sourceMap: map } : { text: out, flags };
   }
 
+  // Terms with legitimate technical meaning that are suppressed when contextMode === 'technical'.
+  // See references/patterns.md and issue #237.
+  const TECHNICAL_EXEMPT = new Set([
+    'robust',
+    'comprehensive',
+    'seamless',
+    'seamlessly',
+    'ecosystem',
+    'leverage',
+    'leverages',
+    'leveraging',
+    'leveraged',
+    'facilitate',
+    'facilitates',
+    'underpin',
+    'underpinning',
+    'underpinnings',
+    'streamline',
+  ]);
+
   // ─── Tier 1: Always flag ───────────────────────────────────────────
   const TIER1 = {
     'delve': 'explore, dig into, look at',
@@ -1707,6 +1727,7 @@ const AIDetector = (() => {
     // ── 1. Tier 1 words ──────────────────────────────────────────
     const tier1Found = new Set();
     for (const token of tokens) {
+      if (contextMode === 'technical' && TECHNICAL_EXEMPT.has(token)) continue;
       if (Object.hasOwn(TIER1, token) && !tier1Found.has(token)) {
         tier1Found.add(token);
         issues.push({
@@ -1726,6 +1747,7 @@ const AIDetector = (() => {
       let match;
       while ((match = regex.exec(text)) !== null) {
         const lower = match[0].toLowerCase();
+        if (contextMode === 'technical' && TECHNICAL_EXEMPT.has(lower)) continue;
         if (tier1Found.has(lower)) continue;
         tier1Found.add(lower);
         issues.push({
@@ -1746,12 +1768,14 @@ const AIDetector = (() => {
       const found = [];
       const suggestions = {};
       for (const token of paraTokens) {
+        if (contextMode === 'technical' && TECHNICAL_EXEMPT.has(token)) continue;
         if (Object.hasOwn(TIER2, token) && !found.includes(token)) {
           found.push(token);
           suggestions[token] = TIER2[token];
         }
       }
       for (const cond of TIER2_CONDITIONAL) {
+        if (contextMode === 'technical' && TECHNICAL_EXEMPT.has(cond.word)) continue;
         if (!found.includes(cond.word) && cond.pattern.test(para)) {
           found.push(cond.word);
           suggestions[cond.word] = cond.suggestion;
