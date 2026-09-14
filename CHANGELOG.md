@@ -6,10 +6,11 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-- Allow pre-commit `args` to override the gate defaults by moving the filename separator out of `entry` and into default `args` (#243).
+## [3.35.0] — 2026-09-13
 
 ### Changed
 
+- Allow pre-commit `args` to override the gate defaults by moving the filename separator out of `entry` and into default `args` (#243).
 - Add npm package keywords, homepage, issue tracker, and author metadata.
 - Rename the user-facing "Emotional flatline" category to "Stock reaction framing" while preserving its `emotional-flatline` API type. Keep specific reactions, flag empty framing, and make the style finding neutral in authorship scoring until relevant positive evidence establishes a direction (#82).
 
