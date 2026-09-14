@@ -1822,6 +1822,39 @@ test('#240: unrelated single-letter capitals do not widen the rule', () => {
   );
 });
 
+test('#291: blank lines do not manufacture a longer heading', () => {
+  // `\s+` between words also eats newlines, so two unrelated lines could
+  // combine into one heading match that neither line independently satisfies.
+  // The repro from #290's fixed-corpus review.
+  const filler = Array.from({ length: 30 }, (_, i) => 'word' + i).join(' ');
+  const cases = [
+    ['## Benefits\n\nOf Good Writing\n\n' + filler, 'blank-line separated fragments'],
+    ['## Benefits\nOf Good Writing\n\n' + filler, 'adjacent-line fragments'],
+    ['## Benefits\r\n\r\nOf Good Writing\r\n\r\n' + filler, 'CRLF variants'],
+  ];
+  for (const [text, why] of cases) {
+    assert.equal(
+      titleCaseHits(text).length,
+      0,
+      `must not combine lines into a heading: ${why}`,
+    );
+  }
+});
+
+test('#291: a single physical line still flags with horizontal whitespace', () => {
+  const filler = Array.from({ length: 30 }, (_, i) => 'word' + i).join(' ');
+  assert.equal(
+    titleCaseHits('## Benefits And Strategic Considerations\n\n' + filler).length,
+    1,
+    'a real one-line heading must still flag',
+  );
+  assert.equal(
+    titleCaseHits('##\tBenefits And Strategic Considerations\n\n' + filler).length,
+    1,
+    'tab-indented heading still flags',
+  );
+});
+
 test('#62: fences that a parity count gets wrong', () => {
   const f3 = '```';
   const f4 = '````';
