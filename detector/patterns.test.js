@@ -2620,6 +2620,30 @@ test('#235: table delimiter rows still mask with surrounding whitespace and CR',
   assert.equal(prose.length, 1, `prose next to a single-cell delimiter still edits: ${JSON.stringify(prose)}`);
 });
 
+test('#237: technical context mode suppresses technical-legitimate vocabulary terms', () => {
+  const text = 'We built a robust, comprehensive, seamless pipeline that can leverage the ecosystem to facilitate and streamline the work that underpins delivery. '.repeat(3);
+
+  const generalResult = AIDetector.analyzeText(text, { contextMode: 'general' });
+  const technicalResult = AIDetector.analyzeText(text, { contextMode: 'technical' });
+
+  assert.ok(generalResult.score > 0, 'general mode must flag technical-legitimate terms');
+  assert.ok(generalResult.issues.length > 0, 'general mode must report issues');
+
+  assert.equal(technicalResult.score, 0, 'technical mode must score 0 on technical-legitimate terms');
+  assert.equal(technicalResult.issues.length, 0, 'technical mode must report 0 issues for technical-legitimate terms');
+
+  // Verify inflections also stay clean under technical mode
+  const inflections = 'Leveraging the leveraged leverages of the ecosystems and seamlessly streamlining what facilitates and underpins the underpinning underpinnings.';
+  const techInflect = AIDetector.analyzeText(inflections, { contextMode: 'technical' });
+  assert.equal(techInflect.issues.length, 0, `technical mode must suppress inflections: ${JSON.stringify(techInflect.issues.map((i) => i.text))}`);
+
+  // Non-exempt terms must STILL fire under technical mode
+  const nonExemptText = 'We delve into the tapestry and beacon to embark on a testament to a game-changer.';
+  const techNonExempt = AIDetector.analyzeText(nonExemptText, { contextMode: 'technical' });
+  const nonExemptTypes = techNonExempt.issues.map((i) => i.type);
+  assert.ok(nonExemptTypes.includes('tier1'), 'delve, tapestry, beacon, game-changer must still fire in technical mode');
+});
+
 if (failed > 0) {
   console.error(`\n${failed} test(s) failed`);
   process.exit(1);
