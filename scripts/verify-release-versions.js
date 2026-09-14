@@ -4,16 +4,19 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-/** Same line anchor the release workflow has used since npm publish guards landed. */
-const CHANGELOG_HEADING_RE = /^## \[([0-9]+\.[0-9]+\.[0-9]+)\]/;
-const SEMVER_RE = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+const NUMERIC_IDENTIFIER = '(?:0|[1-9][0-9]*)';
+const SEMVER_RE = new RegExp(`^${NUMERIC_IDENTIFIER}\\.${NUMERIC_IDENTIFIER}\\.${NUMERIC_IDENTIFIER}$`);
+const CHANGELOG_HEADING_RE = new RegExp(
+  `^## \\[(${NUMERIC_IDENTIFIER}\\.${NUMERIC_IDENTIFIER}\\.${NUMERIC_IDENTIFIER})\\](?:\\s|$)`,
+);
+const CHANGELOG_SECTION_RE = /^##\s+(.+)$/;
+const UNRELEASED_HEADING_RE = /^## \[Unreleased\](?:\s|$)/;
 
 function readChangelogVersion(changelogText) {
-  for (const line of changelogText.split('\n')) {
+  for (const line of changelogText.split(/\r?\n/)) {
+    if (!CHANGELOG_SECTION_RE.test(line) || UNRELEASED_HEADING_RE.test(line)) continue;
     const match = line.match(CHANGELOG_HEADING_RE);
-    if (match) {
-      return match[1];
-    }
+    return match ? match[1] : null;
   }
   return null;
 }
@@ -29,6 +32,7 @@ function readPackageVersion(packageJsonText) {
   if (typeof version !== 'string' || version.length === 0) {
     return { error: 'package.json is missing a string "version" field' };
   }
+  // Releases use numeric X.Y.Z tags only; prereleases intentionally fail closed.
   if (!SEMVER_RE.test(version)) {
     return { error: `package.json version (${version}) is not a numeric X.Y.Z semver` };
   }
@@ -54,7 +58,7 @@ function verifyReleaseVersions(root) {
   if (!changelogVersion) {
     return {
       ok: false,
-      message: "Could not find a '## [X.Y.Z]' heading in CHANGELOG.md",
+      message: "The first release heading after Unreleased must be '## [X.Y.Z]' with numeric semver",
     };
   }
   if (!SEMVER_RE.test(changelogVersion)) {
@@ -102,7 +106,11 @@ function main(argv) {
       root = path.resolve(args[i + 1] || '');
       i += 1;
     } else if (args[i] === '--github-output') {
-      githubOutput = args[i + 1] || process.env.GITHUB_OUTPUT || null;
+      githubOutput = args[i + 1];
+      if (typeof githubOutput !== 'string' || githubOutput.length === 0) {
+        process.stderr.write(`${formatGithubError('--github-output requires a non-empty output path')}\n`);
+        process.exit(2);
+      }
       i += 1;
     } else if (args[i] === '--help' || args[i] === '-h') {
       process.stdout.write(
@@ -132,6 +140,7 @@ function main(argv) {
 
 module.exports = {
   CHANGELOG_HEADING_RE,
+  SEMVER_RE,
   readChangelogVersion,
   readPackageVersion,
   verifyReleaseVersions,
