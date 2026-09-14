@@ -20,9 +20,9 @@ others for fellow newcomers, including while your PR is awaiting review.
 
 You are also welcome to propose your own issues and ideas.
 
-If you've already contributed here, choose a `help wanted` issue without the
+**If you've already contributed here, choose a `help wanted` issue without the
 `good first issue` label, propose another improvement, or help review and test
-newcomer PRs.
+newcomer PRs.**
 
 ## How the repo fits together
 
