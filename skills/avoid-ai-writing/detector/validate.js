@@ -87,7 +87,10 @@ const AIDetectorValidate = (() => {
     // Bare-URL extraction includes adjacent sentence punctuation. Treat it as
     // prose only when removing it exposes an exact tracker in the final field.
     if (queryEnd === u.length) {
-      const punctuation = query.match(/[.,;:!?]+$/)?.[0] || '';
+      // The extractor also keeps emphasis markers, and a dash or ellipsis plus
+      // whatever prose follows it without a space; neither can end an exact
+      // tracker value.
+      const punctuation = query.match(/(?:[–—…].*|[.,;:!?*_~|]+)$/)?.[0] || '';
       const withoutPunctuation = query.slice(0, query.length - punctuation.length);
       const finalParam = withoutPunctuation.slice(withoutPunctuation.lastIndexOf('&') + 1);
       if (punctuation && AI_URL_PARAM.test(finalParam)) {

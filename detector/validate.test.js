@@ -193,6 +193,9 @@ test('stripping a terminal AI tracker preserves adjacent sentence punctuation', 
     ['https://example.com/post?referrer=grok.com,', 'https://example.com/post,'],
     ['https://example.com/post?utm_source=chatgpt.com?', 'https://example.com/post?'],
     ['https://example.com/post?utm_source=chatgpt.com!?', 'https://example.com/post!?'],
+    ['**https://example.com/post?utm_source=chatgpt.com**', '**https://example.com/post**'],
+    ['https://example.com/post?utm_source=chatgpt.com—it', 'https://example.com/post—it'],
+    ['https://example.com/post?a=1&utm_source=chatgpt.com…', 'https://example.com/post?a=1…'],
   ];
 
   for (const [beforeUrl, afterUrl] of cases) {
