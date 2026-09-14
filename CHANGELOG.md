@@ -8,6 +8,7 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- Preserve non-tracking query parameters when removing AI-referrer parameters from URLs during rewrite validation (#210).
 - Replace four superlinear Markdown scans reachable through the detector API with bounded or forward-only parsing. Validate corpus cache IDs, stage and retry cache replacements, isolate CLI-test files in private temporary directories, and require push-triggered releases to prove the package version changed.
 
 ## [3.35.0] — 2026-09-13
