@@ -5,9 +5,35 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+const childProcess = require('node:child_process');
+
+const nativeSpawnSync = childProcess.spawnSync;
+const nativeExecFileSync = childProcess.execFileSync;
+const execFileSync = nativeExecFileSync;
+let gitCountTarget = null;
+if (process.platform === 'win32') {
+  // Capture a Windows-safe launcher when the modules below destructure
+  // spawnSync. Restore child_process afterward so the patch stays test-local.
+  childProcess.spawnSync = (command, args, options) => {
+    if (gitCountTarget && /^git(?:\.exe)?$/i.test(path.basename(command))) {
+      fs.appendFileSync(gitCountTarget, '1\n');
+    }
+    if (path.extname(command).toLowerCase() === '.js') {
+      return nativeSpawnSync(process.execPath, [command, ...args], options);
+    }
+    return nativeSpawnSync(command, args, options);
+  };
+  childProcess.execFileSync = (command, args, options) => {
+    if (gitCountTarget && /^git(?:\.exe)?$/i.test(path.basename(command))) {
+      fs.appendFileSync(gitCountTarget, '1\n');
+    }
+    return nativeExecFileSync(command, args, options);
+  };
+}
 const { prepare } = require('./rewrite-eval.js');
 const runner = require('./rewrite-eval-opencode.js');
+childProcess.spawnSync = nativeSpawnSync;
+childProcess.execFileSync = nativeExecFileSync;
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rewrite-eval-opencode-'));
 process.on('exit', () => fs.rmSync(root, { recursive: true, force: true }));
@@ -214,12 +240,16 @@ const batchConfig = { ...baseConfig, task_ids: [task.id, secondTask.id] };
 const batchConfigPath = path.join(root, 'batch-config.json');
 const batchRun = path.join(root, 'batch-run');
 fs.writeFileSync(batchConfigPath, JSON.stringify(batchConfig));
-const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
-const gitWrapperDir = path.join(root, 'git-wrapper');
-const gitWrapper = path.join(gitWrapperDir, 'git');
 const gitCountPath = path.join(root, 'git-count.txt');
-fs.mkdirSync(gitWrapperDir);
-fs.writeFileSync(gitWrapper, `#!/usr/bin/env node
+const originalPath = process.env.PATH;
+if (process.platform === 'win32') {
+  gitCountTarget = gitCountPath;
+} else {
+  const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
+  const gitWrapperDir = path.join(root, 'git-wrapper');
+  const gitWrapper = path.join(gitWrapperDir, 'git');
+  fs.mkdirSync(gitWrapperDir);
+  fs.writeFileSync(gitWrapper, `#!/usr/bin/env node
 const fs = require('node:fs');
 const { spawnSync } = require('node:child_process');
 fs.appendFileSync(process.env.REWRITE_EVAL_GIT_COUNT_FILE, '1\\n');
@@ -227,13 +257,14 @@ const result = spawnSync(${JSON.stringify(realGit)}, process.argv.slice(2), { st
 if (result.error) throw result.error;
 process.exitCode = result.status ?? 1;
 `);
-fs.chmodSync(gitWrapper, 0o755);
-const originalPath = process.env.PATH;
-process.env.PATH = `${gitWrapperDir}${path.delimiter}${originalPath}`;
-process.env.REWRITE_EVAL_GIT_COUNT_FILE = gitCountPath;
+  fs.chmodSync(gitWrapper, 0o755);
+  process.env.PATH = `${gitWrapperDir}${path.delimiter}${originalPath}`;
+  process.env.REWRITE_EVAL_GIT_COUNT_FILE = gitCountPath;
+}
 try {
   assert.deepEqual(runner.run(planPath, batchConfigPath, batchRun).map((item) => item.status), ['complete', 'complete']);
 } finally {
+  gitCountTarget = null;
   process.env.PATH = originalPath;
   delete process.env.REWRITE_EVAL_GIT_COUNT_FILE;
 }
