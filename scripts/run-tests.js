@@ -14,6 +14,7 @@ const SUITES = [
   'scripts/corpus.test.js',
   'scripts/check-style.test.js',
   'scripts/normalize-quotes.test.js',
+  'scripts/verify-release-versions.test.js',
   'scripts/fp-measure.test.js',
   'scripts/fp-preprocess.test.js',
   'scripts/fp-compare.test.js',
