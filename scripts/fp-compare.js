@@ -144,6 +144,15 @@ function identity(record) {
   ]);
 }
 
+function rowIdentity(record) {
+  return JSON.stringify([
+    record.doc,
+    record.rowId,
+    record.rowIndex,
+    record.rowSourceHash,
+  ]);
+}
+
 function diagnostic(record) {
   if (!record) return null;
   return {
@@ -162,6 +171,7 @@ function diagnostic(record) {
     reason: record.reason,
     headingAttached: record.headingAttached,
     headingKind: record.headingKind,
+    mergedContinuation: record.mergedContinuation,
     kinds: record.kinds,
     inputWords: record.inputWords,
     detectorWords: record.detectorWords,
@@ -173,14 +183,15 @@ function diagnostic(record) {
 
 function changedFields(a, b) {
   const fields = [
-    'normalizedHash', 'selectionStatus', 'status', 'reason', 'headingAttached',
-    'headingKind', 'kinds', 'inputWords', 'detectorWords', 'detectorStatus',
+    'spans', 'normalizedHash', 'selectionStatus', 'status', 'reason', 'headingAttached',
+    'headingKind', 'mergedContinuation', 'kinds', 'inputWords', 'detectorWords', 'detectorStatus',
     'score', 'types',
   ];
   return fields.filter((field) => !sameJson(a[field], b[field]));
 }
 
 function changeImpact(change) {
+  if (change.absorbedInto) return 'segmentation';
   if (change.kind !== 'modified') return 'population';
   const detectorFields = new Set([
     'selectionStatus', 'status', 'reason', 'detectorWords', 'detectorStatus',
@@ -202,35 +213,107 @@ function changePriority(change) {
 
 function changeSet(legacyRecords, currentRecords, exampleLimit = 40) {
   const units = (records) => records.filter((record) => record.recordKind === 'unit');
-  const before = new Map(units(legacyRecords).map((record) => [identity(record), record]));
-  const after = new Map(units(currentRecords).map((record) => [identity(record), record]));
-  const keys = [...new Set([...before.keys(), ...after.keys()])].sort();
+  const beforeRecords = units(legacyRecords);
+  const afterRecords = units(currentRecords);
+  const before = new Map(beforeRecords.map((record) => [identity(record), record]));
+  const after = new Map(afterRecords.map((record) => [identity(record), record]));
+  const pairedBefore = new Set();
+  const pairedAfter = new Set();
+  const attachmentPairs = [];
   const changes = [];
 
-  for (const key of keys) {
-    const a = before.get(key);
+  // Preserve exact-span matching as the first and strongest identity rule.
+  for (const [key, a] of before) {
     const b = after.get(key);
-    if (!a) changes.push({ kind: 'added', key: JSON.parse(key), legacy: null, current: diagnostic(b) });
-    else if (!b) changes.push({ kind: 'removed', key: JSON.parse(key), legacy: diagnostic(a), current: null });
-    else {
-      const fields = changedFields(a, b);
-      if (fields.length) changes.push({ kind: 'modified', key: JSON.parse(key), fields, legacy: diagnostic(a), current: diagnostic(b) });
+    if (!b) continue;
+    pairedBefore.add(a);
+    pairedAfter.add(b);
+    const fields = changedFields(a, b);
+    if (fields.length) changes.push({ kind: 'modified', key: JSON.parse(key), fields, legacy: diagnostic(a), current: diagnostic(b) });
+  }
+
+  // Heading attachment adds a heading span to an otherwise stable body. Pair
+  // only exact body spans, within one source row, and only when the candidate
+  // is unique in both directions. Ambiguous merges and splits stay added and
+  // removed rather than being assigned greedily.
+  const unmatchedBefore = beforeRecords.filter((record) => !pairedBefore.has(record));
+  const unmatchedAfter = afterRecords.filter((record) => !pairedAfter.has(record));
+  const candidatesByCurrent = new Map();
+  const candidatesByLegacy = new Map();
+  for (const current of unmatchedAfter) {
+    if (!current.headingAttached || current.spans.length < 2) continue;
+    const bodySpan = current.spans[current.spans.length - 1];
+    const candidates = unmatchedBefore.filter((legacy) =>
+      rowIdentity(legacy) === rowIdentity(current)
+      && legacy.spans.length === 1
+      && sameJson(legacy.spans[0], bodySpan));
+    candidatesByCurrent.set(current, candidates);
+    for (const legacy of candidates) {
+      if (!candidatesByLegacy.has(legacy)) candidatesByLegacy.set(legacy, []);
+      candidatesByLegacy.get(legacy).push(current);
     }
+  }
+  for (const [current, candidates] of candidatesByCurrent) {
+    if (candidates.length !== 1) continue;
+    const legacy = candidates[0];
+    if (candidatesByLegacy.get(legacy)?.length !== 1) continue;
+    pairedBefore.add(legacy);
+    pairedAfter.add(current);
+    attachmentPairs.push([legacy, current]);
+    const fields = changedFields(legacy, current);
+    changes.push({
+      kind: 'modified',
+      key: JSON.parse(identity(legacy)),
+      currentKey: JSON.parse(identity(current)),
+      fields,
+      legacy: diagnostic(legacy),
+      current: diagnostic(current),
+    });
+  }
+
+  for (const current of afterRecords) {
+    if (!pairedAfter.has(current)) {
+      changes.push({ kind: 'added', key: JSON.parse(identity(current)), legacy: null, current: diagnostic(current) });
+    }
+  }
+  for (const legacy of beforeRecords) {
+    if (pairedBefore.has(legacy)) continue;
+    const absorbedBy = legacy.selectionStatus === 'skipped' && legacy.spans.length === 1
+      ? attachmentPairs.map(([, current]) => current).filter((current) =>
+        rowIdentity(legacy) === rowIdentity(current)
+        && current.spans.slice(0, -1).some((span) => sameJson(span, legacy.spans[0])))
+      : [];
+    changes.push({
+      kind: 'removed',
+      key: JSON.parse(identity(legacy)),
+      legacy: diagnostic(legacy),
+      current: null,
+      ...(absorbedBy.length === 1 ? { absorbedInto: JSON.parse(identity(absorbedBy[0])) } : {}),
+    });
   }
 
   const counts = { added: 0, removed: 0, modified: 0 };
-  const byImpact = { population: 0, detector: 0, normalization: 0, 'metadata-only': 0 };
+  const byImpact = { population: 0, detector: 0, normalization: 0, segmentation: 0, 'metadata-only': 0 };
   for (const change of changes) {
     change.impact = changeImpact(change);
     counts[change.kind]++;
     byImpact[change.impact]++;
   }
   changes.sort((a, b) => changePriority(a) - changePriority(b) || identity(a.current || a.legacy).localeCompare(identity(b.current || b.legacy)));
-  return { counts, byImpact, total: changes.length, examples: changes.slice(0, exampleLimit) };
+  const absorbedHeadings = changes
+    .filter((change) => change.absorbedInto)
+    .map((change) => ({ legacyKey: change.key, currentKey: change.absorbedInto }));
+  return {
+    counts,
+    byImpact,
+    total: changes.length,
+    absorbedHeadings,
+    examples: changes.slice(0, exampleLimit),
+  };
 }
 
 function assertCommonInputs(legacy, current) {
-  const fields = ['manifestHash', 'detectorHash', 'detectorOptions', 'sources'];
+  const fields = ['manifestHash', 'detectorHash', 'measurementHarnessHash', 'detectorOptions', 'sources'];
   for (const field of fields) {
     if (!sameJson(legacy.metadata[field], current.metadata[field])) {
       throw new Error(`Comparison inputs differ between legacy and current runs: ${field}`);
@@ -247,6 +330,7 @@ function comparisonMetadata(legacy, current) {
   return {
     manifestHash: current.metadata.manifestHash,
     detectorHash: current.metadata.detectorHash,
+    measurementHarnessHash: current.metadata.measurementHarnessHash,
     detectorOptions: current.metadata.detectorOptions,
     revision: current.metadata.revision,
     spanEncoding: current.metadata.spanEncoding,
@@ -259,6 +343,10 @@ function comparisonMetadata(legacy, current) {
     preprocessorHashes: {
       legacy: legacy.metadata.preprocessorHash,
       current: current.metadata.preprocessorHash,
+    },
+    preprocessorImplementations: {
+      legacy: legacy.metadata.preprocessorImplementation,
+      current: current.metadata.preprocessorImplementation,
     },
     legacyReference: legacy.metadata.legacyReference,
   };

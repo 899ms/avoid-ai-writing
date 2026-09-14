@@ -38,6 +38,7 @@ const { prepareUnits, normalizeUnit, splitUnits, unitsForText } = require('./fp-
 // near 10; a table starting at 25 reports 0.0% everywhere and hides that fact
 // instead of showing it.
 const THRESHOLDS = [3, 5, 10, 15, 25, 50];
+const LEGACY_REFERENCE = 'fabd62d9c8785dd0edda35201359bcc635b7d3de';
 
 /** Wilson interval. These rates run near the boundaries, where the normal
  *  approximation produces impossible bounds. */
@@ -103,6 +104,27 @@ function legacyPrepareUnits(text, mode = 'paragraph') {
         headingKind: null, inputWords, status: reason ? 'skipped' : 'selected', reason };
     }),
   };
+}
+
+function preprocessorFingerprint(preprocess) {
+  if (preprocess === 'legacy') {
+    return sha256(JSON.stringify({
+      implementation: 'legacy-inline',
+      reference: LEGACY_REFERENCE,
+      dependencies: [wordCount.toString(), legacyPrepareUnits.toString()],
+    }));
+  }
+  return sha256(JSON.stringify({
+    implementation: 'structural-module',
+    source: fs.readFileSync(path.join(__dirname, 'fp-preprocess.js'), 'utf8'),
+  }));
+}
+
+function measurementHarnessFingerprint() {
+  return sha256(
+    fs.readFileSync(__filename, 'utf8')
+    + fs.readFileSync(path.join(__dirname, 'fp-preprocess.js'), 'utf8'),
+  );
 }
 
 function accountingFor(records) {
@@ -204,10 +226,12 @@ function measure(opts = {}) {
   }
   const metadata = {
     schemaVersion: 1, unit, preprocess, revision: revision(),
-    legacyReference: 'fabd62d9c8785dd0edda35201359bcc635b7d3de',
+    legacyReference: LEGACY_REFERENCE,
     manifestHash: sha256(JSON.stringify(manifest)), sources, rows: rowIdentities,
     detectorHash: detector === AIDetector ? sha256(fs.readFileSync(path.join(__dirname, '../detector/patterns.js'), 'utf8')) : null,
-    preprocessorHash: sha256(fs.readFileSync(__filename, 'utf8') + fs.readFileSync(path.join(__dirname, 'fp-preprocess.js'), 'utf8')),
+    measurementHarnessHash: measurementHarnessFingerprint(),
+    preprocessorImplementation: preprocess === 'legacy' ? 'legacy-inline' : 'structural-module',
+    preprocessorHash: preprocessorFingerprint(preprocess),
     detectorOptions: { contextMode: 'general', sourceMode: 'plain' },
     spanEncoding: 'original UTF-16 code units; start inclusive, end exclusive',
   };

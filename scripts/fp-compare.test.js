@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { sha256 } = require('./corpus.js');
-const { compare, parseArgs, publicSummary, writeArtifacts } = require('./fp-compare.js');
+const { changeSet, compare, parseArgs, publicSummary, writeArtifacts } = require('./fp-compare.js');
 
 let passed = 0;
 function test(name, fn) {
@@ -72,19 +72,96 @@ test('runs the same verified source through both preprocessors in both unit mode
     assert.deepStrictEqual(metadata.sourceCounts, { verified: 1, unavailable: 0, injected: 0 });
     assert.strictEqual(metadata.sourceVerification[0].sha256, manifest.documents[0].sha256);
     assert.strictEqual(metadata.sourceVerification[0].status, 'verified');
+    assert.notStrictEqual(metadata.preprocessorHashes.legacy, metadata.preprocessorHashes.current);
+    assert.deepStrictEqual(metadata.preprocessorImplementations, {
+      legacy: 'legacy-inline', current: 'structural-module',
+    });
+    assert.ok(metadata.measurementHarnessHash);
   }
 });
 
-test('reports added, removed, and modified decisions by original spans', () => {
+test('reports decision changes by original spans', () => {
   const changes = result.modes.paragraph.comparison.changes;
-  assert.ok(changes.counts.added > 0, JSON.stringify(changes.counts));
   assert.ok(changes.counts.removed > 0, JSON.stringify(changes.counts));
   assert.ok(changes.counts.modified > 0, JSON.stringify(changes.counts));
+  assert.strictEqual(changes.total, changes.counts.added + changes.counts.removed + changes.counts.modified);
   for (const example of changes.examples) {
     assert.ok(Array.isArray(example.key[4]), 'identity key ends with original spans');
     assert.strictEqual('text' in (example.legacy || {}), false);
     assert.strictEqual('text' in (example.current || {}), false);
   }
+});
+
+test('pairs an attached heading with its unique legacy body without changing either identity', () => {
+  const base = {
+    recordKind: 'unit', doc: 'fixture', rowId: 'row', rowIndex: 0,
+    rowSourceHash: 'source', cls: 'human', register: 'docs', model: null,
+    selectionStatus: 'selected', status: 'selected', reason: null,
+    headingAttached: false, headingKind: null, kinds: ['legacy-flat'],
+    inputWords: 55, detectorWords: 55, detectorStatus: 'Clean', score: 0, types: [],
+  };
+  const legacyHeading = {
+    ...base, spans: [{ start: 0, end: 10 }], unitId: 'legacy-heading', normalizedHash: 'heading',
+    selectionStatus: 'skipped', status: 'skipped', reason: 'below-min', inputWords: 2,
+    detectorWords: null, detectorStatus: null, score: null,
+  };
+  const legacyBody = {
+    ...base, spans: [{ start: 12, end: 100 }], unitId: 'legacy-body', normalizedHash: 'body',
+  };
+  const current = {
+    ...base, spans: [{ start: 0, end: 10 }, { start: 12, end: 100 }],
+    unitId: 'current-attached', normalizedHash: 'heading-body', headingAttached: true,
+    headingKind: 'atx', kinds: ['atx-heading', 'prose'], inputWords: 57,
+    detectorWords: 57, detectorStatus: 'Minimal AI signals', score: 4,
+    types: ['title-case-header'],
+  };
+
+  const changes = changeSet([legacyHeading, legacyBody], [current], 10);
+  assert.deepStrictEqual(changes.counts, { added: 0, removed: 1, modified: 1 });
+  const paired = changes.examples.find((change) => change.kind === 'modified');
+  assert.deepStrictEqual(paired.key[4], legacyBody.spans);
+  assert.deepStrictEqual(paired.currentKey[4], current.spans);
+  assert.strictEqual(paired.legacy.unitId, 'legacy-body');
+  assert.strictEqual(paired.current.unitId, 'current-attached');
+  assert.ok(paired.fields.includes('spans'));
+  assert.strictEqual(paired.impact, 'detector');
+
+  const absorbed = changes.examples.find((change) => change.kind === 'removed');
+  assert.deepStrictEqual(absorbed.absorbedInto[4], current.spans);
+  assert.strictEqual(absorbed.impact, 'segmentation');
+  assert.strictEqual(changes.byImpact.population, 0);
+  assert.strictEqual(changes.byImpact.segmentation, 1);
+
+  const capped = changeSet([legacyHeading, legacyBody], [current], 0);
+  assert.deepStrictEqual(capped.examples, []);
+  assert.deepStrictEqual(capped.absorbedHeadings, [{
+    legacyKey: absorbed.key,
+    currentKey: absorbed.absorbedInto,
+  }]);
+});
+
+test('leaves ambiguous attachment candidates unpaired and counts each record once', () => {
+  const base = {
+    recordKind: 'unit', doc: 'fixture', rowId: 'row', rowIndex: 0,
+    rowSourceHash: 'source', cls: 'human', register: 'docs', model: null,
+    selectionStatus: 'selected', status: 'selected', reason: null,
+    headingAttached: false, headingKind: null, kinds: ['legacy-flat'],
+    inputWords: 55, detectorWords: 55, detectorStatus: 'Clean', score: 0, types: [],
+  };
+  const legacy = { ...base, spans: [{ start: 20, end: 100 }], unitId: 'legacy', normalizedHash: 'body' };
+  const first = {
+    ...base, spans: [{ start: 0, end: 10 }, { start: 20, end: 100 }],
+    unitId: 'first', normalizedHash: 'first', headingAttached: true, headingKind: 'atx',
+  };
+  const second = {
+    ...base, spans: [{ start: 11, end: 18 }, { start: 20, end: 100 }],
+    unitId: 'second', normalizedHash: 'second', headingAttached: true, headingKind: 'atx',
+  };
+
+  const changes = changeSet([legacy], [first, second], 10);
+  assert.deepStrictEqual(changes.counts, { added: 2, removed: 1, modified: 0 });
+  assert.strictEqual(changes.total, 3);
+  assert.strictEqual(changes.examples.some((change) => change.currentKey), false);
 });
 
 test('compares an empty row that produces no current decisions', () => {
@@ -159,6 +236,11 @@ test('summary and decision artifacts contain hashes and diagnostics without corp
   const summary = JSON.parse(fs.readFileSync(written.summaryPath, 'utf8'));
   assert.strictEqual(summary.modes.paragraph.decisions, undefined);
   assert.ok(summary.modes.paragraph.metadata.manifestHash);
+  assert.ok(summary.modes.paragraph.comparison.changes.absorbedHeadings.length > 0);
+  assert.deepStrictEqual(
+    summary.modes.paragraph.comparison.changes.absorbedHeadings,
+    result.modes.paragraph.comparison.changes.absorbedHeadings,
+  );
   const decisions = fs.readFileSync(written.decisionsPath, 'utf8').trim().split('\n').map(JSON.parse);
   assert.strictEqual(decisions[0].recordKind, 'meta');
   assert.ok(decisions.some((record) => record.recordKind === 'unit' && record.normalizedHash));

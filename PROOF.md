@@ -109,12 +109,15 @@ slightly changes document-level metrics that are computed over the whole text
 shrinks. Vocabulary and phrase categories are unaffected.
 
 A false-positive rate has been measured, and it is not quoted here as a claim.
-[`corpus/README.md`](corpus/README.md) publishes the full table against 875
-human and 779 machine paragraphs: at `score >= 5`, 4.2% FPR (95% CI 3.1–5.8)
-against 7.2% TPR. Paragraph-level ROC-AUC is 0.501 pooled — a coin flip — and
-0.623 at document level. Read plainly, the composite score cannot reliably
-separate machine text from human text, and no threshold on it buys a useful
-true-positive rate at a tolerable false-positive cost.
+[`corpus/README.md`](corpus/README.md) publishes the legacy-preparation table
+against 875 human and 779 machine paragraphs: at `score >= 5`, 4.2% FPR (95% CI
+3.1–5.8) against 7.2% TPR. Paragraph-level ROC-AUC is 0.501 pooled — a coin flip
+— and 0.623 at document level. The legacy and repaired paths were compared
+with a pinned detector in the immutable [#290 comparison
+evidence](https://github.com/conorbronsdon/avoid-ai-writing/tree/39accce14131723c796ee640d88c3fe1b0223815/corpus/reports/fp-preprocessing-86ef5ab3).
+Read plainly, the composite score cannot reliably separate machine text from
+human text, and no threshold on it buys a useful true-positive rate at a
+tolerable false-positive cost.
 
 Those numbers stay in the corpus write-up rather than becoming a headline
 because they do not clear this repo's own publication gate. The gate requires

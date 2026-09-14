@@ -115,8 +115,10 @@ score, since clean text also scores 0 and is labeled `Clean`.
 
 `options.contextMode` accepts `general` (default), `technical`, `marketing`, and
 `personal`. Technical mode suppresses flags that are legitimate in code-adjacent
-prose (e.g. Title Case headers); `marketing` and `personal` are accepted and
-reported in `stats.contextMode`, but currently score the same as `general`.
+prose (e.g. Title Case headers and eight technical-legitimate terms: `robust`,
+`comprehensive`, `seamless`, `ecosystem`, `leverage`, `facilitate`, `underpin`,
+`streamline`); `marketing` and `personal` are accepted and reported in
+`stats.contextMode`, but currently score the same as `general`.
 Invalid modes fall back to `general` and set `stats.contextModeFallback` to the
 value you passed.
 
