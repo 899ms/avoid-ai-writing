@@ -1,9 +1,13 @@
 # Output contract forward scenarios
 
-These manual scenarios supplement the frozen rewrite comparison in `cases.json`
-and `protocol.json`. They exercise presentation, pass accounting, stopping, and
-execution-status behavior. They do not change the frozen corpus or its scoring
-rules.
+These scenario specifications cover presentation, pass accounting, stopping,
+and execution-status behavior. The [automated merge gate](automated-gate.md)
+uses executed model responses and independent model assessment; human review is
+optional. The frozen historical `cases.json` and `protocol.json` remain unchanged.
+
+A scenario listed here is coverage intent until an execution report names it.
+Tool-free scenario runs cannot demonstrate actual file edits or verifier calls;
+reports must distinguish supplied intermediate states from executed tool events.
 
 For each scenario, save the complete response and record the observed final-text
 count, `pass.index`, `pass.max`, stop reason, and tool execution status. Judge the

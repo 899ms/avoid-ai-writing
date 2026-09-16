@@ -1,5 +1,14 @@
 # Rewrite preservation regressions
 
+## Current merge gate
+
+The [automated regression gate](automated-gate.md) governs the editing-contract
+and single-final-rewrite stack. It was adopted on 2026-09-16 with maintainer
+authorization. Human adjudication is optional follow-up work, not a merge
+requirement. The historical comparative experiment below retains its original
+frozen protocol and evidence rules; its results must not be relabeled as
+complete or human-reviewed to satisfy the new gate.
+
 `demo.json` records the quick demo's source, required facts, known forbidden
 additions, allowed edits, and contrasting outputs. Run `node scripts/rewrite-demo.test.js`.
 The check reads the published README pair, so fixture-only correctness cannot
@@ -8,7 +17,8 @@ hide a regression in the example readers see.
 These explicit patterns catch the original investor/integration inventions and
 missing dashboards. They accept more than one rewrite, but can reject an
 unlisted paraphrase or accept a negated, contradictory, or newly invented claim.
-They do not prove semantic fidelity. Human review remains necessary.
+They do not prove semantic fidelity. Model-assisted scenario review supplies
+additional regression evidence, not human-validated writing-quality evidence.
 
 ## Published example audit
 
@@ -31,7 +41,7 @@ Reviewed at main `d57265d` for issue #200:
 The examples are fictional. No real-world funding or product claim is verified
 by these fixtures. Wider editing evaluation is tracked in #201.
 
-## Editing evaluation pilot (#201)
+## Historical comparative evaluation pilot (#201)
 
 This is offline evaluation infrastructure, not a model runner or a published
 benchmark result. It makes no network calls and needs no model credentials.
@@ -270,7 +280,12 @@ creates only the missing files, and conflicting contents still fail closed.
 Each run or import performs the full Git-backed plan/provenance check once (six
 pinned-file reads for this protocol); per-task and final row checks reuse that
 already-verified in-memory plan without launching 3,888 redundant Git jobs for
-a 648-task import. `opencode_path` must be absolute. Use a new directory for an explicit retry so
+a 648-task import. `opencode_path` must be absolute. On Windows it must name the
+native `opencode.exe`; npm's `opencode.cmd` and other command shims cannot be
+launched by this runner. A global npm installation typically places the native
+binary under `%APPDATA%\npm\node_modules\opencode-ai\bin\opencode.exe`. Verify
+that the selected binary reports the pinned version before starting a run. Use
+a new directory for an explicit retry so
 the rejected attempt remains in the experiment record. A configuration with
 `task_ids` must use `purpose: "diagnostic"`. Zen's free model IDs are moving
 aliases; record that limitation and do not describe them as immutable model
@@ -342,9 +357,12 @@ failures. Mechanical checks can flag missing protected text and the demo's known
 regressions, but do not establish semantic fidelity or quality. No detector score
 is used, and no automatic rollout approval is produced.
 
-### Release comparison and limits
+### Historical experiment release comparison and limits
 
-`protocol.json` freezes the policy before comparative runs. Use at least two
+The following policy applies only to completing or making claims from the
+historical comparative experiment. It is not the current merge gate; see
+[automated-gate.md](automated-gate.md). `protocol.json` freezes that experiment
+policy before comparative runs. Use at least two
 editor model families for a release comparison and report each separately. A
 single available family is diagnostic only. Require complete human review and
 three repetitions for every case/condition. The candidate must have no higher
@@ -360,4 +378,5 @@ before release. This small pilot is diagnostic, not statistical proof of general
 improvement. Report counts, sample sizes, disagreements and limitations.
 
 No comparative model run or human adjudication has been performed by adding this
-harness. Issue #201 remains open for those experiment results and release review.
+harness. Issue #201 records the revised acceptance criteria and any optional future
+comparative work.

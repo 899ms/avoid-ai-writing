@@ -397,6 +397,29 @@ test('#190: many HTML comments avoid quadratic rescanning', () => {
   );
 });
 
+test('adversarial Markdown scans stay within a bounded time', () => {
+  const ordinary = 'one two three four five six seven eight nine ten';
+  const attacks = [
+    `${ordinary} ${'`'.repeat(2500)}${'a'.repeat(2500)}`,
+    `${ordinary} ${'<a'.repeat(10000)}`,
+    `## 1.1.1${'\t'.repeat(20000)}— x\n${ordinary}`,
+    `## 1.1.${'1'.repeat(64000)}]x — 2026-01-01\n${ordinary}`,
+    `- ${' '.repeat(10000)}X\rY\n${ordinary}`,
+  ];
+  for (const text of attacks) {
+    const started = performance.now();
+    AIDetector.analyzeText(text);
+    const elapsedMs = performance.now() - started;
+    assert.ok(elapsedMs < 900, `adversarial scan took ${elapsedMs.toFixed(1)}ms`);
+  }
+});
+
+test('version-heading dash carve-out does not swallow prose after a closed version label', () => {
+  const text = '## [1.1.1] Not a version label — 2026-01-01\n\nOne two three four five six seven eight nine ten.';
+  const issues = AIDetector.analyzeText(text).issues.filter((issue) => issue.type === 'em-dash');
+  assert.equal(issues.length, 1, 'text after a closed version label must keep its prose dash visible');
+});
+
 test('repeated Tier 1 phrase does not inflate score linearly', () => {
   const single = AIDetector.analyzeText('We delve into the landscape of many things today.');
   const fivefold = AIDetector.analyzeText(
@@ -1799,6 +1822,54 @@ test('#240: unrelated single-letter capitals do not widen the rule', () => {
   );
 });
 
+test('#314: first-person I can appear inside a Title Case heading', () => {
+  assert.equal(
+    titleCaseHits('## What I Learned And Why It Matters' + HEADING_BODY).length,
+    1,
+    'a first-person title with a targeted capitalized function word must flag',
+  );
+  for (const heading of [
+    '## What X Learned And Why It Matters',
+    '## What I learned and why it matters',
+    '## What I Learned About Writing',
+  ]) {
+    assert.equal(titleCaseHits(heading + HEADING_BODY).length, 0, `must not flag: ${heading}`);
+  }
+});
+
+test('#291: blank lines do not manufacture a longer heading', () => {
+  // `\s+` between words also eats newlines, so two unrelated lines could
+  // combine into one heading match that neither line independently satisfies.
+  // The repro from #290's fixed-corpus review.
+  const filler = Array.from({ length: 30 }, (_, i) => 'word' + i).join(' ');
+  const cases = [
+    ['## Benefits\n\nOf Good Writing\n\n' + filler, 'blank-line separated fragments'],
+    ['## Benefits\nOf Good Writing\n\n' + filler, 'adjacent-line fragments'],
+    ['## Benefits\r\n\r\nOf Good Writing\r\n\r\n' + filler, 'CRLF variants'],
+  ];
+  for (const [text, why] of cases) {
+    assert.equal(
+      titleCaseHits(text).length,
+      0,
+      `must not combine lines into a heading: ${why}`,
+    );
+  }
+});
+
+test('#291: a single physical line still flags with horizontal whitespace', () => {
+  const filler = Array.from({ length: 30 }, (_, i) => 'word' + i).join(' ');
+  assert.equal(
+    titleCaseHits('## Benefits And Strategic Considerations\n\n' + filler).length,
+    1,
+    'a real one-line heading must still flag',
+  );
+  assert.equal(
+    titleCaseHits('##\tBenefits And Strategic Considerations\n\n' + filler).length,
+    1,
+    'tab-indented heading still flags',
+  );
+});
+
 test('#62: fences that a parity count gets wrong', () => {
   const f3 = '```';
   const f4 = '````';
@@ -2651,6 +2722,80 @@ test('#237: technical context mode suppresses technical-legitimate vocabulary te
   for (const term of requiredNonExempt) {
     assert.ok(nonExemptIssueTexts.includes(term), `technical mode must still flag non-exempt term "${term}"`);
   }
+});
+
+test('reply openers and analytical framing are not reported as acknowledgment loops (#239)', () => {
+  // Acknowledgment loops are judgment-only: these phrases also open ordinary
+  // replies, and "the question of whether" is standard analytical English. The
+  // tell is a restatement that adds nothing, which the engine cannot read.
+  const clean = [
+    'The question of whether the effect persists after controlling for income is still open, and the two replications disagree with each other.',
+    'To answer your question from Tuesday: the invoice went out on the 3rd and the payment cleared last week, so nothing is outstanding on our side.',
+    "You're asking about the retry limit. It is five by default and configurable with RETRY_MAX, though we do not recommend raising it past ten.",
+  ];
+  for (const text of clean) {
+    for (const contextMode of [undefined, 'technical']) {
+      const r = AIDetector.analyzeText(text, contextMode ? { contextMode } : {});
+      const hits = r.issues.filter((i) => /question of whether|answer your question|asking about/i.test(i.text));
+      assert.deepEqual(hits.map((i) => `${i.type}:${i.text}`), [], `${contextMode || 'default'}: ${text}`);
+      assert.ok(!r.issues.some((i) => i.type === 'acknowledgment-loop'));
+    }
+  }
+});
+
+test('#241: unsegmented-script documents are declined, not scored "Too short"', () => {
+  // countWords counts \S+ runs; Chinese and Japanese carry no inter-word
+  // spaces, so segmentation cannot measure them. The script check runs
+  // before the word gate and declines only when CJK characters dominate
+  // the non-whitespace text. Han + kana ranges (including halfwidth
+  // katakana) signal an unsegmented script; Hangul is space-separated and
+  // segments fine, so it is excluded.
+  const zh = '这个函数返回一个承诺，调用方不应假设句柄之后仍可重用。'.repeat(50);
+  const rzh = AIDetector.analyzeText(zh);
+  assert.equal(rzh.label, 'Unsupported script', `expected Unsupported script, got ${rzh.label}`);
+  assert.equal(rzh.unsupportedScript, true);
+  assert.equal(rzh.document_classification, 'UNSCORED');
+  assert.ok(rzh.stats.cjkChars > 0, 'stats must carry the cjkChars count');
+  assert.match(rzh.stats.reason, /unsegmented-script/);
+
+  const ja = 'この関数はプロミスを返します。呼び出し側は、ハンドルがその後も再利用できると仮定してはいけません。'.repeat(40);
+  assert.equal(AIDetector.analyzeText(ja).label, 'Unsupported script');
+
+  // Halfwidth katakana (U+FF66–U+FF9D) is also an unsegmented script.
+  const jaHw = 'ﾃｽﾄ'.repeat(100);
+  assert.equal(AIDetector.analyzeText(jaHw).label, 'Unsupported script');
+
+  // Supplementary-plane Han and kana must be counted by code point. Explicit
+  // BMP ranges miss these characters and a non-Unicode regex counts each
+  // surrogate pair twice in the dominance denominator.
+  const zhSupplementary = '𠀀'.repeat(100); // CJK Unified Ideographs Extension B
+  const rzhSupplementary = AIDetector.analyzeText(zhSupplementary);
+  assert.equal(rzhSupplementary.label, 'Unsupported script');
+  assert.equal(rzhSupplementary.stats.cjkChars, 100);
+  const jaSupplementary = '𛀀'.repeat(100); // Kana Supplement
+  assert.equal(AIDetector.analyzeText(jaSupplementary).label, 'Unsupported script');
+
+  // Newline-wrapped CJK lines each count as a word, so the script check
+  // must not sit inside the minimum word-count condition.
+  const zhLines = Array(10).fill('这个函数返回一个承诺。').join('\n');
+  assert.equal(AIDetector.analyzeText(zhLines).label, 'Unsupported script');
+
+  // A genuinely short English document still reports Too short.
+  const en = AIDetector.analyzeText('Short text here.');
+  assert.equal(en.label, 'Too short');
+  assert.equal(en.unsupportedScript, undefined);
+
+  // An incidental CJK place name in a short English document is not an
+  // unsegmented-script document: the dominance check keeps it scorable.
+  const mixed = AIDetector.analyzeText('The Tokyo (東京) office owns the retry limit docs.');
+  assert.equal(mixed.label, 'Too short');
+  assert.equal(mixed.unsupportedScript, undefined);
+
+  // Korean is space-separated: it segments and scores normally.
+  const ko = '이 함수는 프라미스를 반환합니다. 호출자는 핸들이 나중에 재사용 가능하다고 가정해서는 안 됩니다. '.repeat(30);
+  const rko = AIDetector.analyzeText(ko);
+  assert.notEqual(rko.label, 'Unsupported script');
+  assert.equal(rko.unsupportedScript, undefined);
 });
 
 if (failed > 0) {
