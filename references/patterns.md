@@ -717,6 +717,13 @@ After applying this catalog, follow the skill entry's Output format for the
 requested mode. Normal cleanup returns one Final rewrite, an optional Changes
 summary, and Verification; a separate Issues found section requires a requested
 detailed audit. Put protected and intentional residuals in Verification.
+Identify the applicable patterns retained in protected passages and why they
+remain; a list of protected region types alone is not a residual report.
+
+Before drafting, if context exceptions leave no justified, authorized edit and
+no separate transformation was requested, copy the source exactly into Final
+rewrite with zero editing passes. Do not make optional clarity or cadence edits
+to text that needs no cleanup; an inferred profile does not request them.
 
 Assemble Final rewrite first, then derive the change summary from its actual
 differences from the source. Check every claimed edit against the delivered
