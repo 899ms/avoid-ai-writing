@@ -9,6 +9,10 @@ requirement. The historical comparative experiment below retains its original
 frozen protocol and evidence rules; its results must not be relabeled as
 complete or human-reviewed to satisfy the new gate.
 
+The [2026-09-16 stack report](reports/automated-stack-295-296-2026-09-16/README.md)
+records executed scenarios, retained failures, independent reviews, and the
+remaining blocker. Its evidence does not complete the historical pilot.
+
 `demo.json` records the quick demo's source, required facts, known forbidden
 additions, allowed edits, and contrasting outputs. Run `node scripts/rewrite-demo.test.js`.
 The check reads the published README pair, so fixture-only correctness cannot
