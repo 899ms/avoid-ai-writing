@@ -322,6 +322,26 @@ test('re-aligning a table without outer pipes → no error', () => {
   assert.equal(r.ok, true, formatResult(r));
 });
 
+test('compact GFM delimiters protect cells and allow delimiter padding changes', () => {
+  for (const delimiter of ['- | -', '-- | --', ':-: | --:']) {
+    for (const outer of [false, true]) {
+      const row = (text) => outer ? `| ${text} |` : text;
+      const before = [row('Name | Value'), row(delimiter), row('alpha | beta')].join('\n');
+      const changed = validate(before, before.replace('alpha', 'changed'), { skipResidual: true });
+      assert.ok(codes(changed).includes('table-modified'), formatResult(changed));
+      const padded = before.replace(delimiter, delimiter.replace(/-+/g, '-----'));
+      const same = validate(before, padded, { skipResidual: true });
+      assert.equal(same.ok, true, formatResult(same));
+    }
+  }
+});
+
+test('colon-only cells do not form a table delimiter', () => {
+  const before = 'Name | Value\n: | ::\nalpha | beta';
+  const r = validate(before, before.replace('alpha', 'changed'), { skipResidual: true });
+  assert.equal(r.ok, true, formatResult(r));
+});
+
 test('hyphens in table content remain significant', () => {
   const before = 'Name | Value\n--- | ---\nfoo--bar | one\n';
   const after = 'Name | Value\n--- | ---\nfoo-bar | one\n';

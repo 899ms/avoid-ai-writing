@@ -69,4 +69,17 @@ t('four-space-indented table-shaped code remains ordinary code', () => {
   assert.strictEqual(applyExemptions(source), source);
 });
 
+for (const delimiter of ['- | -', '-- | --', ':-: | --:']) {
+  for (const outer of [false, true]) {
+    const row = (text) => outer ? `| ${text} |` : text;
+    const table = [row('Name | Value'), row(delimiter), row('alpha | beta')].join('\n');
+    exempt(`blanks compact delimiter ${delimiter}, outer pipes ${outer}`, table, table);
+  }
+}
+
+t('colon-only delimiter cells remain ordinary prose', () => {
+  const source = 'Name | Value\n: | ::\nalpha | beta';
+  assert.strictEqual(applyExemptions(source), source);
+});
+
 process.stdout.write(`\n${passed} self-scan exemption tests passed\n`);

@@ -192,7 +192,7 @@ const AIDetectorValidate = (() => {
   function isTableDelimiter(line) {
     const cells = tableCells(line);
     return cells !== null && cells.length > 0
-      && cells.every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
+      && cells.every((cell) => /^:?-+:?$/.test(cell.trim()));
   }
 
   /**
