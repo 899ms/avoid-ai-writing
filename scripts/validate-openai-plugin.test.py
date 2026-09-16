@@ -123,6 +123,10 @@ errors = skill_name_errors('name: voice-preserving-rewriter\n"name" :"wrong-name
 assert any("duplicate frontmatter key: name" in error for error in errors), errors
 assert any("must match directory" in error for error in errors), errors
 
+for key_line in (r'"\x6eame": wrong-name', '? name\n: wrong-name'):
+    errors = skill_name_errors('name: voice-preserving-rewriter\n' + key_line)
+    assert any("unsupported top-level frontmatter key syntax" in error for error in errors), errors
+
 errors = skill_name_errors('"name": false-positive-reviewer')
 assert any("duplicate skill name 'false-positive-reviewer'" in error for error in errors), errors
 assert MODULE.duplicate_top_level_frontmatter_keys(

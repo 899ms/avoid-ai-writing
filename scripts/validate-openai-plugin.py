@@ -28,6 +28,8 @@ def parse_frontmatter(path: Path):
         return {}, ""
     meta = {}
     for key, value in frontmatter_entries(match.group(1)):
+        if key is None:
+            continue
         parsed = parse_supported_yaml_scalar(value)
         meta[key] = parsed if parsed is not None else value.strip()
     return meta, match.group(2).strip()
@@ -38,7 +40,7 @@ def frontmatter_inner(text: str) -> str | None:
 
 
 def frontmatter_entries(inner: str):
-    """Read top-level scalar keys; normalize quoted and plain spellings alike."""
+    """Normalize supported scalar keys; yield None for unsupported top-level syntax."""
     for line in inner.splitlines():
         if not line or line[0] in (" ", "\t", "#"):
             continue
@@ -46,16 +48,19 @@ def frontmatter_entries(inner: str):
         if match:
             # JSON-style quoted YAML keys permit a value directly after ':'.
             if match.group(2) and not match.group(2)[0].isspace() and match.group(1)[0] not in ("'", '"'):
+                yield None, ""
                 continue
-            key = parse_supported_yaml_scalar(match.group(1))
-            if key is not None:
-                yield key, match.group(2) or ""
+            yield parse_supported_yaml_scalar(match.group(1)), match.group(2) or ""
+        else:
+            yield None, ""
 
 
 def duplicate_top_level_frontmatter_keys(inner: str) -> list[str]:
     """Return repeated keys within one frontmatter mapping, not across copies."""
     counts: dict[str, int] = {}
     for key, _ in frontmatter_entries(inner):
+        if key is None:
+            continue
         counts[key] = counts.get(key, 0) + 1
     return sorted(key for key, count in counts.items() if count > 1)
 
@@ -528,6 +533,8 @@ def validate(root: Path):
         meta, body = parse_frontmatter(skill_path)
         inner = frontmatter_inner(skill_path.read_text(encoding="utf-8"))
         if inner:
+            if any(key is None for key, _ in frontmatter_entries(inner)):
+                errors.append(f"{skill_path}: unsupported top-level frontmatter key syntax")
             for key in duplicate_top_level_frontmatter_keys(inner):
                 errors.append(f"{skill_path}: duplicate frontmatter key: {key}")
         name = meta.get("name", "")
@@ -564,6 +571,8 @@ def validate(root: Path):
             )
         canonical_inner = frontmatter_inner(canonical.read_text(encoding="utf-8"))
         if canonical_inner:
+            if any(key is None for key, _ in frontmatter_entries(canonical_inner)):
+                errors.append(f"{canonical}: unsupported top-level frontmatter key syntax")
             for key in duplicate_top_level_frontmatter_keys(canonical_inner):
                 errors.append(f"{canonical}: duplicate frontmatter key: {key}")
         meta, _ = parse_frontmatter(canonical)
