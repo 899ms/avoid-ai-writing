@@ -1,5 +1,8 @@
 ﻿# Automated editing regression report: PRs #295 and #296
 
+This is the retained report through the third repair cycle. See the
+[follow-up report](FOLLOWUP.md) for later source repairs and executed results.
+
 Date: 2026-09-16. This report applies the maintainer-approved
 [automated gate](../../automated-gate.md). Human evaluation was not required
 or performed. The historical pilot, frozen cases, protocol, and receipts were
