@@ -6,6 +6,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Require explicit skill names matching their directories and reject duplicate frontmatter keys, including mixed quoted/unquoted keys, while retaining required names in every generated distribution (#259).
+
 ### Added
 
 - Add machine-readable `--json` output to `avoid-ai-writing-gate` and expose `pass`, `total-findings`, and `failed-files` step outputs in the GitHub Action (#252).
