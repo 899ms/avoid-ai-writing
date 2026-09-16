@@ -12,10 +12,6 @@ import xml.etree.ElementTree as ET
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 FRONTMATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n(.*)\Z", re.S)
-# The top-level `metadata` key only: `metadata:` at column 0 followed by
-# whitespace or end of line, so `metadata:extra:` (a different plain key) is kept.
-METADATA_KEY = re.compile(r"metadata:(?:\s|$)")
-TOP_LEVEL_NAME_KEY = re.compile(r"name:(?:\s|$)")
 TOP_LEVEL_INCLUDE_FILES = ("OPENAI_PLUGIN.md", "NOTICE.md", "PRIVACY.md", "TERMS.md", "SUPPORT.md", "LICENSE")
 CANONICAL_PROJECT_URL = "https://github.com/conorbronsdon/avoid-ai-writing"
 MAX_SVG_BYTES = 256 * 1024
@@ -31,11 +27,9 @@ def parse_frontmatter(path: Path):
     if not match:
         return {}, ""
     meta = {}
-    for line in match.group(1).splitlines():
-        if ":" not in line or line.startswith((" ", "\t")):
-            continue
-        key, value = line.split(":", 1)
-        meta[key.strip()] = value.strip().strip('"').strip("'")
+    for key, value in frontmatter_entries(match.group(1)):
+        parsed = parse_supported_yaml_scalar(value)
+        meta[key] = parsed if parsed is not None else value.strip()
     return meta, match.group(2).strip()
 
 def frontmatter_inner(text: str) -> str | None:
@@ -43,40 +37,27 @@ def frontmatter_inner(text: str) -> str | None:
     return match.group(1) if match else None
 
 
-def duplicate_top_level_frontmatter_keys(inner: str) -> list[str]:
-    """Return top-level YAML keys that appear more than once in a frontmatter block."""
-    counts: dict[str, int] = {}
+def frontmatter_entries(inner: str):
+    """Read top-level scalar keys; normalize quoted and plain spellings alike."""
     for line in inner.splitlines():
         if not line or line[0] in (" ", "\t", "#"):
             continue
-        if ":" not in line:
-            continue
-        key = line.split(":", 1)[0].strip()
+        match = re.fullmatch(r'''("(?:\\.|[^"\\])*"|'(?:''|[^'])*'|[A-Za-z_][A-Za-z0-9_-]*)[ \t]*:(.*)''', line)
+        if match:
+            # JSON-style quoted YAML keys permit a value directly after ':'.
+            if match.group(2) and not match.group(2)[0].isspace() and match.group(1)[0] not in ("'", '"'):
+                continue
+            key = parse_supported_yaml_scalar(match.group(1))
+            if key is not None:
+                yield key, match.group(2) or ""
+
+
+def duplicate_top_level_frontmatter_keys(inner: str) -> list[str]:
+    """Return repeated keys within one frontmatter mapping, not across copies."""
+    counts: dict[str, int] = {}
+    for key, _ in frontmatter_entries(inner):
         counts[key] = counts.get(key, 0) + 1
     return sorted(key for key, count in counts.items() if count > 1)
-
-
-def strip_frontmatter_name(text: str) -> str:
-    """Drop the top-level `name` line from SKILL.md frontmatter when the directory name is authoritative."""
-    match = FRONTMATTER.match(text)
-    if not match:
-        return text
-    kept, skip = [], False
-    for line in match.group(1).splitlines(keepends=True):
-        if not skip and line[:1] not in (" ", "\t") and TOP_LEVEL_NAME_KEY.match(line.rstrip("\r\n")):
-            continue
-        skip = False
-        kept.append(line)
-    joined = "".join(kept)
-    if joined and joined.endswith("\n"):
-        joined = joined[:-1]
-    start, end = match.start(1), match.end(1)
-    return text[:start] + joined + text[end:]
-
-
-def openai_canonical_skill_copy(text: str) -> str:
-    """OpenAI bundled copy: no portal-rejected metadata, no redundant `name` (directory is avoid-ai-writing)."""
-    return strip_frontmatter_name(strip_frontmatter_metadata(text))
 
 
 def strip_frontmatter_metadata(text: str) -> str:
@@ -94,7 +75,7 @@ def strip_frontmatter_metadata(text: str) -> str:
     inner = match.group(1)
     kept, skip = [], False
     for line in inner.splitlines(keepends=True):
-        if METADATA_KEY.match(line):
+        if any(key == "metadata" for key, _ in frontmatter_entries(line)):
             skip = True
             continue
         if skip and (line[:1] in (" ", "\t", "#") or line.strip() == ""):
@@ -116,7 +97,7 @@ def strip_frontmatter_metadata(text: str) -> str:
 
 def frontmatter_has_metadata(path: Path) -> bool:
     match = FRONTMATTER.match(path.read_text(encoding="utf-8"))
-    return bool(match) and any(METADATA_KEY.match(line) for line in match.group(1).split("\n"))
+    return bool(match) and any(key == "metadata" for key, _ in frontmatter_entries(match.group(1)))
 
 
 def safe_rel(value: str) -> bool:
@@ -549,9 +530,9 @@ def validate(root: Path):
         if inner:
             for key in duplicate_top_level_frontmatter_keys(inner):
                 errors.append(f"{skill_path}: duplicate frontmatter key: {key}")
-        name = meta.get("name") or skill_dir.name
+        name = meta.get("name", "")
         desc = meta.get("description", "")
-        if not desc or not body:
+        if not name or not desc or not body:
             errors.append(f"{skill_path}: name, description, and body are required")
         if meta.get("name") and meta.get("name") != skill_dir.name:
             errors.append(
@@ -576,10 +557,10 @@ def validate(root: Path):
     if canonical.is_file():
         if not openai_copy.is_file():
             errors.append("skills/avoid-ai-writing/SKILL.md missing; cannot check drift from root SKILL.md")
-        elif openai_canonical_skill_copy(canonical.read_text(encoding="utf-8")) != openai_copy.read_text(encoding="utf-8"):
+        elif strip_frontmatter_metadata(canonical.read_bytes().decode("utf-8")).encode("utf-8") != openai_copy.read_bytes():
             errors.append(
                 "skills/avoid-ai-writing/SKILL.md drifted from root SKILL.md "
-                "(expected: root minus the frontmatter `metadata` block and redundant `name`)"
+                "(expected: root minus the frontmatter `metadata` block)"
             )
         canonical_inner = frontmatter_inner(canonical.read_text(encoding="utf-8"))
         if canonical_inner:
@@ -745,19 +726,10 @@ def main():
         metavar="SKILL_MD",
         help="print SKILL_MD with the frontmatter `metadata` block removed and exit",
     )
-    parser.add_argument(
-        "--openai-canonical-skill-copy",
-        metavar="SKILL_MD",
-        help="print the OpenAI bundled canonical skill copy (metadata and redundant name stripped) and exit",
-    )
     args = parser.parse_args()
     if args.strip_frontmatter_metadata:
         data = Path(args.strip_frontmatter_metadata).read_bytes().decode("utf-8")
         sys.stdout.buffer.write(strip_frontmatter_metadata(data).encode("utf-8"))
-        return 0
-    if args.openai_canonical_skill_copy:
-        data = Path(args.openai_canonical_skill_copy).read_bytes().decode("utf-8")
-        sys.stdout.buffer.write(openai_canonical_skill_copy(data).encode("utf-8"))
         return 0
     errors, warnings, summary = validate(Path(args.root).resolve())
     if args.json:

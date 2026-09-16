@@ -8,7 +8,7 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
-- Drop redundant `name` frontmatter from the generated `SKILL.full.md` and OpenAI bundled `skills/avoid-ai-writing/SKILL.md` copy; the directory name remains authoritative per Agent Skills convention (#259).
+- Require explicit skill names matching their directories and reject duplicate frontmatter keys, including mixed quoted/unquoted keys, while retaining required names in every generated distribution (#259).
 
 ### Added
 
