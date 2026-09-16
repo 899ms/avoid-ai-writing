@@ -718,6 +718,13 @@ requested mode. Normal cleanup returns one Final rewrite, an optional Changes
 summary, and Verification; a separate Issues found section requires a requested
 detailed audit. Put protected and intentional residuals in Verification.
 
+Assemble Final rewrite first, then derive the change summary from its actual
+differences from the source. Check every claimed edit against the delivered
+span; planned or reverted edits must not be reported as completed changes.
+A justified edit missing from the final text remains unresolved, even if the
+audit correctly identified it. Follow the entry's shared editing budget when
+correcting a missing edit; do not invent an extra pass or a successful result.
+
 Verification states editing passes, checks, residuals, and the stop reason.
 When tools are unavailable, name them: the detector, marks normalizer, and
 preservation validator did not run; the assessment is model-only. Use that
