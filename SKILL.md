@@ -265,6 +265,8 @@ node detector/validate.js <original> <rewritten>
 
 It exits non-zero when a rewrite altered a fenced code block, YAML frontmatter, a blockquote, a table cell, inline code, a URL, a file path, or the heading structure, and when the rewrite introduced more flagged patterns than it removed. Those are the promises made above; this is what checks them. Rewording a heading to fix Title Case and stripping an AI tracking parameter from a URL are carved out, because this skill instructs both.
 
+The validator does not know which protected changes the user specifically requested. Retain its actual result and review such differences against the user's scope in a separate model-only assessment. Report an authorized difference as requiring that scope review instead of automatically restoring the original or calling the deterministic check a pass. Other protected content must still be preserved; a general style or voice request does not authorize changing it.
+
 ---
 
 ## Tone calibration
