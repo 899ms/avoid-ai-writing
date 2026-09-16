@@ -907,6 +907,21 @@ Each profile is a set of concrete targets, not a vibe:
 **How voice composes with context.** Apply context and each rule's pass conditions first. An inferred voice does not reactivate a category the context skips. An explicitly requested voice may authorize its stylistic target in otherwise editable prose, but it does not turn a context-exempt pattern into an AI-ism and cannot override source fidelity or protected content. House-style mechanics control typography after those gates. When applicable voice and context rules set numeric thresholds for the same feature, use the stricter threshold; do not apply a global strictness maximum across different dimensions. Sensible default pairings remain casual↔casual, professional↔linkedin/investor-email, and technical↔docs/technical-blog.
 
 ---
+
+## Return to the output contract
+
+After applying this catalog, follow the skill entry's Output format for the
+requested mode. Normal cleanup returns one Final rewrite, an optional Changes
+summary, and Verification; a separate Issues found section requires a requested
+detailed audit. Put protected and intentional residuals in Verification.
+
+Verification states editing passes, checks, residuals, and the stop reason.
+When tools are unavailable, name them: the detector, marks normalizer, and
+preservation validator did not run; the assessment is model-only. Use that
+status for unchanged text too. Do not replace it with a generic "no tools"
+statement. No change means zero editing passes. Detect mode returns findings
+and assessment without a rewrite, and reports its model-only status when the
+detector cannot run.
 ## House style (optional): `--style <config-or-guide>`
 
 `--style` copyedits to a house style on top of the de-AI pass (which always runs). No bundled guides. This layer is not a guide registry: it applies **register/voice** directives and removes AI tells, on top of whatever **mechanics** you enforce.
