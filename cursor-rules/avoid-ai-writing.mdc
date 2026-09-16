@@ -917,6 +917,8 @@ Complete the audit, authorized editing passes, marks pass, and available verific
 
 For a normal cleanup, follow the final text with **Changes** when a short summary is useful and **Verification**. Verification must describe the text under Final rewrite, not an earlier candidate. State how many editing passes were used, which checks actually ran, whether they were deterministic or model-only, and why the workflow stopped. Report intentional, protected, source-blocked, or pass-limit residuals without claiming that every pattern disappeared. If a required tool could not run, name the unavailable check and do not call it verified.
 
+When tools are unavailable, explicitly label the audit and preservation assessment **model-only** and state that the detector, marks normalizer, and preservation validator did not run. Do this even for unchanged text or text with no marks to normalize; a check being unnecessary does not establish that it ran. Keep protected or intentional findings in Verification during normal cleanup. Reserve the separate Issues found section for an explicitly requested detailed audit.
+
 If the user explicitly requests a detailed or exhaustive audit, add **Issues found** before Final rewrite, quoting each justified finding and identifying unresolved protected or source-blocked findings. This adds evidence, not a second copy of the text.
 
 For a clean no-op, return the source unchanged once under Final rewrite, omit the change summary, and say in Verification that no justified in-scope edit was found. If the text remains unchanged because every finding is intentional, protected, or source-blocked, report those residuals instead of calling the source clean. If verification fails after the editing budget is exhausted, label the failure and unresolved risk; do not hide it or emit another rewrite.
@@ -930,6 +932,8 @@ A bulleted list of every justified AI-ism identified, with the offending text qu
 
 **2. Assessment**
 For each flag, note whether it's a clear problem or a judgment call. Some AI-associated patterns are effective writing techniques — uniform paragraph length is a problem, but a well-placed "however" isn't. Call out which flags the writer should definitely fix vs. which ones are worth a second look but might be fine in context. If the text is clean, say so.
+
+State whether the detector actually ran or the audit was model-only. When tools are unavailable, say the detector did not run. Report zero editing passes; detect mode performs no marks normalization or rewriting.
 
 ### Edit mode
 
