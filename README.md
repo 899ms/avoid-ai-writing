@@ -6,6 +6,8 @@ Audit & rewrite content to remove AI writing patterns. A practical skill for any
 
 [![GitHub stars](https://img.shields.io/github/stars/conorbronsdon/avoid-ai-writing?style=social)](https://github.com/conorbronsdon/avoid-ai-writing/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/avoid-ai-writing-detector.svg)](https://www.npmjs.com/package/avoid-ai-writing-detector)
+[![detector](https://github.com/conorbronsdon/avoid-ai-writing/actions/workflows/detector-test.yml/badge.svg)](https://github.com/conorbronsdon/avoid-ai-writing/actions/workflows/detector-test.yml)
 [![Podcast](https://img.shields.io/badge/Podcast-Chain_of_Thought-purple?style=flat-square)](https://chainofthought.show/?utm_source=github&utm_medium=referral&utm_campaign=repo-readme&utm_content=avoid-ai-writing)
 [![X](https://img.shields.io/badge/X-@ConorBronsdon-black?style=flat-square&logo=x)](https://x.com/ConorBronsdon)
 
@@ -25,6 +27,44 @@ A portable writing skill for [Claude Code](https://docs.anthropic.com/en/docs/cl
 Use `--iterate 1|2` to set the editing-pass ceiling. `--iterate 1` allows the initial rewrite only. `--iterate 2` uses the default maximum of an initial rewrite plus one correction or preservation repair, and stops early when no justified in-scope edit remains. Checks do not consume a pass, but any change they prompt does. The skill reports how many editing passes it used and any intentional, protected, or unresolved finding.
 
 An optional **voice profile** (casual / professional / technical / warm / blunt) sets how the prose should sound, independent of the audience context profile.
+
+## Table of contents
+- [Quick demo](#quick-demo)
+- [Why a skill, not just a prompt](#why-a-skill-not-just-a-prompt)
+- [Installation & Usage](#installation--usage)
+    * [Install the complete skill directory](#install-the-complete-skill-directory)
+    * [Claude Code](#claude-code)
+    * [Claude Cowork — install as a plugin](#claude-cowork--install-as-a-plugin)
+    * [OpenClaw](#openclaw)
+    * [Cursor](#cursor)
+    * [Hermes](#hermes)
+    * [OpenAI Codex](#openai-codex)
+    * [Native ChatGPT and Codex plugin package](#native-chatgpt-and-codex-plugin-package)
+    * [Other agents](#other-agents)
+    * [Triggering the skill](#triggering-the-skill)
+- [Pattern reference](#pattern-reference)
+    * [Content Patterns](#content-patterns)
+    * [Language Patterns](#language-patterns)
+    * [Structure Patterns](#structure-patterns)
+    * [Communication Patterns](#communication-patterns)
+    * [Meta Patterns](#meta-patterns)
+    * [Structural Detection (v3.4)](#structural-detection-v34)
+    * [AI-tool fingerprints & later additions (v3.5–3.8)](#ai-tool-fingerprints--later-additions-v3538)
+    * [Conversational-register patterns (v3.15)](#conversational-register-patterns-v315)
+    * [Share-post framing (v3.20)](#share-post-framing-v320)
+    * [Narrated candor (v3.21)](#narrated-candor-v321)
+    * [Unnecessary hyphenation (v3.24)](#unnecessary-hyphenation-v324)
+- [Full Example](#full-example)
+- [Run the detector](#run-the-detector)
+    * [Score a file or piped text from the command line](#score-a-file-or-piped-text-from-the-command-line)
+    * [Gate prose in GitHub Actions or pre-commit](#gate-prose-in-github-actions-or-pre-commit)
+    * [Use the detector over MCP](#use-the-detector-over-mcp)
+- [House style is a different job](#house-style-is-a-different-job)
+- [More from me](#more-from-me)
+- [Credits](#credits)
+- [Community / Multilingual](#community--multilingual)
+- [Disclaimer](#disclaimer)
+- [License](#license)
 
 ## Quick demo
 
