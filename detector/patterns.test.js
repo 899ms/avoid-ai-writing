@@ -2819,6 +2819,34 @@ test('uniformity: five equal long sentences fire, varied rhythm stays clean', ()
     .filter(i => i.type === 'uniformity').length, 0, 'four sentences are below the sample gate');
 });
 
+test('uniformity: sentence-length spread pins the 0.25 variation threshold', () => {
+  // Identical sentences sit at CV 0, so they cannot tell 0.25 from 0.01.
+  // These bracket the threshold: 9/12/14/16/19 words is CV 0.243 and fires;
+  // widening the ends to 8 and 20 words is CV 0.286 and stays clean.
+  const middle = [
+    'The queue had cleared by noon, so we closed the incident early.',
+    'After the connection dropped, the worker retried twice before it finally gave up completely.',
+    'We restored the backup from Tuesday and reran the batch with a smaller request limit overnight.',
+  ];
+  const nearThreshold = [
+    'Mara checked the logs and found nothing unusual there.',
+    ...middle,
+    'Nobody could explain why the second worker still held the lock after the scheduler had already marked it done.',
+  ].join(' ');
+  const issues = AIDetector.analyzeText(nearThreshold).issues.filter(i => i.type === 'uniformity');
+  assert.deepEqual(issues.map(i => i.text), [
+    'Sentence lengths cluster around 14 words (low variation)',
+  ]);
+
+  const justOver = [
+    'Mara checked the logs and found nothing unusual.',
+    ...middle,
+    'Nobody could explain why the second worker still held the lock after the scheduler had already marked it as done.',
+  ].join(' ');
+  assert.equal(AIDetector.analyzeText(justOver).issues.filter(i => i.type === 'uniformity').length, 0,
+    'CV 0.286 must sit above the threshold');
+});
+
 test('uniformity: equal paragraph sizes fire, varied paragraph sizes stay clean', () => {
   const paragraph = 'Mara checked the logs. The queue had cleared. We closed the incident.';
   const issues = AIDetector.analyzeText(Array(4).fill(paragraph).join('\n\n')).issues
