@@ -3,7 +3,9 @@
  *
  * Node-runnable smoke tests for the detection engine. Intentionally small and
  * dependency-free so they run on any `node >= 18` without installing
- * anything. Invoked via `npm run test:detector` and in CI.
+ * anything. Run by `npm test`, by `node scripts/run-tests.js
+ * detector/patterns.test.js` for this suite alone, or directly as
+ * `node detector/patterns.test.js`. CI runs `npm test`.
  *
  * Failure modes worth catching:
  *   - AI-heavy text scoring as human (regression in pattern coverage)
@@ -1244,8 +1246,7 @@ test('hashtag-stuff still fires on tags spread inline through a post', () => {
 test('low-ttr fires on a 200+ token text with narrow vocabulary', () => {
   // Vocabulary-poor synthetic sample: same 11-word sentence repeated.
   // ~200 tokens, ~11 unique = ~5% TTR. Well under the 40% threshold.
-  // Stylometric signal from the May 2026 detection-research review
-  // (docs/competitive/detection-research.md).
+  // Stylometric signal from the May 2026 detection-research review.
   const sentence = 'The system shows the system improves the system every iteration. ';
   const text = sentence.repeat(20);
   const r = AIDetector.analyzeText(text);
